@@ -1,35 +1,9 @@
-# ============================================================
-#  REQUIREMENTS — Descriptive Analytics Workbench
-#  Fixed for Streamlit Cloud (Python 3.14)
-#  Install with: pip install -r requirements.txt
-# ============================================================
-
-# Core data
-pandas>=2.2.2
-numpy>=1.26.4
-openpyxl>=3.1.2
-xlrd>=2.0.1
-
-# Statistics
-scipy>=1.13.1
-statsmodels>=0.14.2
-
-# Visualisation
-matplotlib>=3.9.0
-seaborn>=0.13.2
-plotly>=5.22.0
-
-# Frontend
-streamlit>=1.35.0
-
-# Pillow — unpinned so Streamlit Cloud picks a compatible wheel
-Pillow>=10.4.0
-
-# ML-ready (locked; not used in descriptive phase)
-scikit-learn>=1.9.0
-imbalanced-learn>=0.12.3
-joblib>=1.4.2
-
-# Export
-fpdf2>=2.7.9
-xlsxwriter>=3.2.0
+streamlit
+pandas
+numpy
+plotly
+scikit-learn
+scipy
+openpyxl
+xlrd
+joblib
