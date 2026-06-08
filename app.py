@@ -5,8 +5,6 @@
 
 import io
 import warnings
-import pickle
-import joblib
 
 import numpy as np
 import pandas as pd
@@ -213,7 +211,8 @@ tabs = st.tabs([
     "📊 Charts",
     "🔄 Transform",
     "💾 Export",
-    "🤖 ML-Ready",
+    "🧹 Data Cleaning",
+    "💡 Recommendations",
 ])
 
 
