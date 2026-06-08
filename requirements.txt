@@ -1,9 +1,7 @@
 pandas
 numpy
-
 openpyxl
 xlrd
-xlsxwriter
 
 scipy
 statsmodels
@@ -14,33 +12,9 @@ plotly
 
 streamlit
 
-Pillow
-
 scikit-learn
 imbalanced-learn
 joblib
 
 fpdf2
-
-pyarrow
-tabulate
-
-kaleido
-
-ydata-profiling
-
-missingno
-
-sweetviz
-
-category-encoders
-
-shap
-
-networkx
-
-wordcloud
-
-pingouin
-
-researchpy
+xlsxwriter
