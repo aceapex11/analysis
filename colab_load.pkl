@@ -1,0 +1,146 @@
+# ============================================================
+#  GOOGLE COLAB — Load ml_ready.pkl & Prepare for ML
+#  Upload your ml_ready.pkl from the Streamlit app, then
+#  run cells in order.
+# ============================================================
+
+# ── CELL 1 : Install exact dependencies ─────────────────────
+# Run this cell first, then restart runtime if prompted.
+# !pip install scikit-learn==1.6.1 pandas numpy scipy --quiet
+# Note: scikit-learn 1.9.0 is not yet released (latest = 1.6.1).
+# Update the version number here once 1.9.0 is available.
+
+
+# ── CELL 2 : Upload the .pkl file from your local machine ───
+from google.colab import files
+import io, pickle, warnings
+import numpy  as np
+import pandas as pd
+warnings.filterwarnings("ignore")
+
+print("📂 Upload your  ml_ready.pkl  file ↓")
+uploaded = files.upload()                          # triggers file picker
+
+
+# ── CELL 3 : Load & inspect the pkl payload ─────────────────
+pkl_name = list(uploaded.keys())[0]
+payload  = pickle.loads(uploaded[pkl_name])
+
+df        = payload["dataframe"]
+num_cols  = payload["num_cols"]
+cat_cols  = payload["cat_cols"]
+date_cols = payload["date_cols"]
+miss_pct  = payload["missing_pct"]
+
+print(f"\n✅ Loaded '{pkl_name}'")
+print(f"   Shape       : {df.shape}")
+print(f"   Numeric cols: {num_cols}")
+print(f"   Cat cols    : {cat_cols}")
+print(f"   Date cols   : {date_cols}")
+print(f"\n📋 First 5 rows:")
+df.head()
+
+
+# ── CELL 4 : Missing value summary ──────────────────────────
+miss_df = pd.DataFrame.from_dict(miss_pct, orient="index", columns=["Missing %"])
+miss_df = miss_df[miss_df["Missing %"] > 0].sort_values("Missing %", ascending=False)
+
+if miss_df.empty:
+    print("✅ No missing values — dataset is clean!")
+else:
+    print("⚠️  Columns with missing values:")
+    print(miss_df)
+
+
+# ── CELL 5 : Descriptive statistics recap ───────────────────
+print("\n📊 Descriptive Statistics (Numeric):")
+if num_cols:
+    desc = df[num_cols].describe().T
+    desc["cv%"] = (desc["std"] / desc["mean"] * 100).round(2)
+    print(desc.to_string())
+else:
+    print("No numeric columns found.")
+
+
+# ── CELL 6 : Choose your target column ──────────────────────
+# ✏️  EDIT: set your target column name here
+TARGET_COL = None   # e.g.  TARGET_COL = "SalePrice"
+
+if TARGET_COL and TARGET_COL in df.columns:
+    X = df.drop(columns=[TARGET_COL])
+    y = df[TARGET_COL]
+    print(f"✅ Feature matrix X : {X.shape}")
+    print(f"   Target vector  y : {y.shape}")
+    print(f"   Target dtype     : {y.dtype}")
+else:
+    print("ℹ️  Set TARGET_COL in this cell to split X / y.")
+    X = df.copy()
+    y = None
+
+
+# ── CELL 7 : ML-ready encoding (categorical) ────────────────
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+X_ml = X.copy()
+
+# Drop date columns (can engineer features from them separately)
+X_ml.drop(columns=[c for c in date_cols if c in X_ml.columns], inplace=True, errors="ignore")
+
+# Label-encode categoricals
+encoders = {}
+for col in cat_cols:
+    if col in X_ml.columns:
+        X_ml[col] = X_ml[col].fillna("Missing").astype(str)
+        le = LabelEncoder()
+        X_ml[col] = le.fit_transform(X_ml[col])
+        encoders[col] = le
+
+# Fill remaining numeric NaNs with median
+for col in X_ml.select_dtypes(include=np.number).columns:
+    X_ml[col].fillna(X_ml[col].median(), inplace=True)
+
+print(f"✅ ML-ready feature matrix: {X_ml.shape}")
+print(f"   Dtypes:\n{X_ml.dtypes.value_counts().to_string()}")
+
+
+# ── CELL 8 : Train/Test split ───────────────────────────────
+from sklearn.model_selection import train_test_split
+
+if y is not None:
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_ml, y, test_size=0.2, random_state=42
+    )
+    print(f"Train : {X_train.shape}  |  Test : {X_test.shape}")
+else:
+    print("ℹ️  Set TARGET_COL (Cell 6) to perform train/test split.")
+
+
+# ── CELL 9 : Scale features (optional, ML-ready) ────────────
+scaler    = StandardScaler()
+X_train_s = scaler.fit_transform(X_train) if y is not None else None
+X_test_s  = scaler.transform(X_test)      if y is not None else None
+print("✅ Features scaled with StandardScaler.")
+print("   Ready to plug into any scikit-learn estimator!")
+
+
+# ── CELL 10 : Save the ML-ready arrays back as .pkl ─────────
+if y is not None:
+    ml_bundle = {
+        "X_train"   : X_train,
+        "X_test"    : X_test,
+        "y_train"   : y_train,
+        "y_test"    : y_test,
+        "X_train_s" : X_train_s,
+        "X_test_s"  : X_test_s,
+        "scaler"    : scaler,
+        "encoders"  : encoders,
+        "feature_names": list(X_ml.columns),
+    }
+    SAVE_PATH = "ml_bundle.pkl"
+    with open(SAVE_PATH, "wb") as f:
+        pickle.dump(ml_bundle, f)
+
+    files.download(SAVE_PATH)
+    print(f"⬇️  '{SAVE_PATH}' downloaded — ready for your ML pipeline!")
+else:
+    print("ℹ️  Set TARGET_COL to save the full ML bundle.")
