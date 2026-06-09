@@ -1330,9 +1330,9 @@ with tabs[5]:
                 "Approximately Normal":    "background-color:#f0fdf4;color:#16a34a;font-weight:600",
             }
             return colour_map.get(val, "")
-
+        
         st.dataframe(
-            skew_df.style.applymap(_colour_cls, subset=["Classification"]).format(
+            skew_df.style.map(_colour_cls, subset=["Classification"]).format(
                 {"Skewness": "{:.4f}", "Mean": "{:.4f}", "Median": "{:.4f}", "Std": "{:.4f}"}
             ),
             use_container_width=True, height=min(400, 60 + 35 * len(skew_rows)),
