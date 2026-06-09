@@ -715,15 +715,15 @@ def encoding_preview(s: pd.Series, col: str, method: str) -> pd.DataFrame:
 
     else:  # Ordinal Encoding
 
-    s = s.fillna("Missing").astype(str)
+        s = s.fillna("Missing").astype(str)
 
-    cats = sorted(s.unique())
+        cats = sorted(s.unique())
 
-    oe = OrdinalEncoder(categories=[cats])
+        oe = OrdinalEncoder(categories=[cats])
 
-    encoded = oe.fit_transform(
-        s.to_numpy().reshape(-1, 1)
-    ).flatten()
+        encoded = oe.fit_transform(
+            s.to_numpy().reshape(-1, 1)
+        ).flatten()
 
     return pd.DataFrame({
         col: s,
