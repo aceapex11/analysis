@@ -714,13 +714,21 @@ def encoding_preview(s: pd.Series, col: str, method: str) -> pd.DataFrame:
         return pd.DataFrame({col: s, "Freq_Encoded": s.map(freq_map).round(4)})
 
     else:  # Ordinal Encoding
-        cats = sorted(s.unique())
-        oe   = OrdinalEncoder(categories=[cats])
-        return pd.DataFrame({
-            col:      s,
-            "Ordinal": oe.fit_transform(s.values.reshape(-1, 1)).flatten(),
-        })
 
+    s = s.fillna("Missing").astype(str)
+
+    cats = sorted(s.unique())
+
+    oe = OrdinalEncoder(categories=[cats])
+
+    encoded = oe.fit_transform(
+        s.to_numpy().reshape(-1, 1)
+    ).flatten()
+
+    return pd.DataFrame({
+        col: s,
+        "Ordinal": encoded,
+    })
 
 # ─────────────────────────────────────────────
 #  RECOMMENDATIONS ENGINE
