@@ -234,6 +234,343 @@ div.stAlert { border-radius: 10px !important; }
 
 
 # ─────────────────────────────────────────────
+#  CORRECTION TYPE INFO  (new — mirrors ENCODING_INFO style)
+# ─────────────────────────────────────────────
+CORRECTION_TYPE_INFO = {
+    "Fill with Mean": {
+        "full_name": "Mean Imputation",
+        "what": "Replaces missing values with the arithmetic average of the non-null values in that column.",
+        "when": "Data is numeric and approximately normally distributed with few outliers.",
+        "why": "Preserves the column mean, minimises distortion for symmetric distributions.",
+        "avoid": "Skewed data or columns with heavy outliers — the mean will be pulled toward extremes.",
+        "pros": [
+            "Simple and fast — one line of code",
+            "Works well for normally distributed data",
+            "Doesn't alter the column mean",
+        ],
+        "cons": [
+            "Reduces variance and correlation with other variables",
+            "Poor choice for skewed or bimodal distributions",
+            "Inflates confidence in imputed values",
+        ],
+        "best_for": ["Symmetric numeric columns", "Low missing % (< 5%)"],
+    },
+    "Fill with Median": {
+        "full_name": "Median Imputation",
+        "what": "Replaces missing values with the middle value of the sorted non-null data.",
+        "when": "Data is numeric but skewed, or contains outliers.",
+        "why": "The median is robust to outliers — it stays at the distribution centre even when extremes exist.",
+        "avoid": "Normally distributed data where mean imputation would be equally valid and more intuitive.",
+        "pros": [
+            "Robust to outliers and skewed distributions",
+            "Doesn't inflate extreme values",
+            "Good default for numeric columns",
+        ],
+        "cons": [
+            "Still reduces variance",
+            "Not suitable for categorical data",
+            "May not reflect true central tendency for multimodal data",
+        ],
+        "best_for": ["Right/left-skewed numeric columns", "Columns with outliers", "Income, salary, price columns"],
+    },
+    "Fill with Mode": {
+        "full_name": "Mode Imputation",
+        "what": "Replaces missing values with the most frequently occurring value in the column.",
+        "when": "Column is categorical, boolean, or a low-cardinality integer.",
+        "why": "The mode is the most 'typical' value — a sensible default for discrete data.",
+        "avoid": "High-cardinality columns or numeric columns with a uniform distribution — the mode may not be representative.",
+        "pros": [
+            "Works for both numeric and categorical columns",
+            "Easy to interpret and explain",
+            "Preserves the most common category",
+        ],
+        "cons": [
+            "If two modes exist, only one is chosen — can be arbitrary",
+            "Over-represents the dominant category",
+            "Poor for continuous numeric data",
+        ],
+        "best_for": ["Categorical / text columns", "Boolean (yes/no) columns", "Low-cardinality integers"],
+    },
+    "Fill with Constant": {
+        "full_name": "Constant / Custom Value Imputation",
+        "what": "Fills all missing values with a user-specified constant (e.g. 0, -1, 'Unknown', 'Missing').",
+        "when": "Missing values have a known or meaningful interpretation (e.g. 0 means 'none', 'Unknown' flags absence).",
+        "why": "Preserves the information that a value was missing, rather than hiding it behind a statistic.",
+        "avoid": "When the constant could be confused with a real value (e.g. filling age with 0).",
+        "pros": [
+            "Full control — you decide the fill value",
+            "Makes missingness explicit (e.g. 'Unknown' category)",
+            "Useful when absence itself is informative",
+        ],
+        "cons": [
+            "Wrong constant choice can introduce bias",
+            "Downstream models may misinterpret the constant as a real value",
+        ],
+        "best_for": ["When missingness is not at random", "Categorical flags", "When you have domain knowledge about the fill value"],
+    },
+    "Fill with Forward Fill (ffill)": {
+        "full_name": "Forward Fill (Last Observation Carried Forward)",
+        "what": "Propagates the last known non-null value forward to fill subsequent missing values.",
+        "when": "Data has a natural ordering (time series, sequences) and consecutive rows are related.",
+        "why": "In ordered data, the last observed value is the best estimate for the immediately following missing one.",
+        "avoid": "Unordered tabular data where rows are independent — forward fill will introduce spurious patterns.",
+        "pros": [
+            "Ideal for time-series and sensor data",
+            "Preserves trend continuity",
+            "No statistical assumptions needed",
+        ],
+        "cons": [
+            "Meaningless for unordered / cross-sectional data",
+            "Can propagate stale values over long gaps",
+            "First row remains NaN if it is the missing one",
+        ],
+        "best_for": ["Time series", "Sequential measurements", "Log / event data"],
+    },
+    "Fill with Backward Fill (bfill)": {
+        "full_name": "Backward Fill (Next Observation Carried Backward)",
+        "what": "Fills missing values using the next available non-null value that appears later in the sequence.",
+        "when": "Ordered data where the next known value is a better estimate than the previous one.",
+        "why": "Sometimes future context is more reliable — e.g. filling a missing month's sales with next month's figure.",
+        "avoid": "Unordered datasets, or when using future values would constitute data leakage in a predictive model.",
+        "pros": [
+            "Useful when future values are known at inference time",
+            "Complements ffill for full gap coverage",
+        ],
+        "cons": [
+            "Risk of data leakage in ML pipelines",
+            "Last row remains NaN if it is missing",
+            "Only meaningful for ordered data",
+        ],
+        "best_for": ["Filling start-of-period gaps in time series", "When used after ffill to cover remaining NaNs"],
+    },
+    "Drop rows with missing": {
+        "full_name": "Complete Case Analysis (Listwise Deletion)",
+        "what": "Removes any row that contains at least one missing value in the selected column.",
+        "when": "The percentage of missing values is very small (< 1–2%) and rows are missing completely at random (MCAR).",
+        "why": "Dropping a few rows has negligible impact on analysis when missingness is truly random.",
+        "avoid": "When missing % is high (> 5%) or when data is not MCAR — dropping may introduce selection bias.",
+        "pros": [
+            "Simplest approach — no imputed values to worry about",
+            "Keeps data genuine with no synthetic values",
+        ],
+        "cons": [
+            "Loses real data — can reduce statistical power",
+            "Introduces bias if missingness is not random (MAR / MNAR)",
+            "Dangerous with high missing rates",
+        ],
+        "best_for": ["< 2% missing values", "MCAR (Missing Completely At Random) scenario", "Small datasets where every column is critical"],
+    },
+}
+
+
+# ─────────────────────────────────────────────
+#  SKEWNESS CLASSIFICATION REFERENCE
+# ─────────────────────────────────────────────
+SKEWNESS_CLASSIFICATION = {
+    "Highly Right Skewed":      {"range": "skewness > 1",        "color": "#dc2626", "badge": "badge-danger"},
+    "Moderately Right Skewed":  {"range": "0.5 < skewness ≤ 1",  "color": "#f97316", "badge": "badge-warn"},
+    "Approximately Normal":     {"range": "|skewness| ≤ 0.5",    "color": "#16a34a", "badge": "badge-ok"},
+    "Moderately Left Skewed":   {"range": "−1 ≤ skewness < −0.5","color": "#f97316", "badge": "badge-warn"},
+    "Highly Left Skewed":       {"range": "skewness < −1",       "color": "#dc2626", "badge": "badge-danger"},
+}
+
+# ─────────────────────────────────────────────
+#  SKEWNESS TRANSFORMATION INFO
+# ─────────────────────────────────────────────
+SKEWNESS_TRANSFORM_INFO = {
+    "Log (log1p)": {
+        "full_name": "Logarithmic Transformation — log(x + 1)",
+        "what": "Applies the natural logarithm after adding 1 to handle zeros: log(x + 1).",
+        "when": "Column is right-skewed (positively skewed) with all values ≥ 0.",
+        "why": "Compresses the long right tail, pulling extreme high values closer to the bulk of the data. Adding 1 avoids log(0) = −∞.",
+        "avoid": "Columns with negative values (requires shift first). Left-skewed data — log makes it worse.",
+        "pros": [
+            "Most intuitive and widely used de-skewing tool",
+            "Handles zero values safely with log1p",
+            "Interpreted as proportional / percentage change",
+        ],
+        "cons": [
+            "Only fixes right skew — not left skew",
+            "Transformed scale is harder to interpret directly",
+            "Negative values require an extra shift step",
+        ],
+        "best_for": ["Income, salary, price columns", "Counts and frequencies", "Any right-skewed column with values ≥ 0"],
+    },
+    "Square Root": {
+        "full_name": "Square Root Transformation — √x",
+        "what": "Applies √x to each value. A milder transformation than log.",
+        "when": "Right-skewed data, especially count data or data following a Poisson distribution.",
+        "why": "Compresses the right tail less aggressively than log — good when the skew is moderate rather than extreme.",
+        "avoid": "Negative values (produces NaN). Extreme skew where a stronger transformation (log, Box-Cox) is needed.",
+        "pros": [
+            "Milder than log — preserves more of the original scale",
+            "Good for count / Poisson data",
+            "Simple and fast",
+        ],
+        "cons": [
+            "Doesn't fully fix extreme right skew",
+            "Cannot handle negative values",
+            "Less effective than log for heavy-tailed distributions",
+        ],
+        "best_for": ["Moderate right skew", "Count data (views, clicks, events)", "Poisson-distributed columns"],
+    },
+    "Box-Cox": {
+        "full_name": "Box-Cox Power Transformation",
+        "what": "Finds the optimal power parameter λ that makes the distribution most normal. When λ=0 it is log; λ=0.5 is sqrt; λ=1 is no change.",
+        "when": "Data is right-skewed and strictly positive (all values > 0).",
+        "why": "Automatically chooses the best power transformation — more flexible than manually picking log or sqrt.",
+        "avoid": "Data containing zeros or negative values (requires a positive shift first). When interpretability matters — the λ-transformed scale is hard to explain.",
+        "pros": [
+            "Optimal — finds the best λ for normality automatically",
+            "More flexible than log or sqrt",
+            "Supported by scipy and sklearn",
+        ],
+        "cons": [
+            "Requires all values > 0 (fails on zeros without shift)",
+            "Transformed values are hard to interpret",
+            "λ must be re-estimated on new data (leakage risk in ML)",
+        ],
+        "best_for": ["Strictly positive right-skewed columns", "When log/sqrt don't fully fix normality", "Preprocessing for linear/regression models"],
+    },
+    "Yeo-Johnson": {
+        "full_name": "Yeo-Johnson Power Transformation",
+        "what": "Generalisation of Box-Cox that works on both positive AND negative values by splitting the transformation at zero.",
+        "when": "Column can contain zeros or negative values; you need a power transformation more flexible than log.",
+        "why": "Unlike Box-Cox, it doesn't require strictly positive values — making it a safer default for general numeric columns.",
+        "avoid": "When interpretability is critical — the transformed scale is as opaque as Box-Cox.",
+        "pros": [
+            "Works with zeros AND negative values",
+            "Optimal λ chosen automatically",
+            "Sklearn's PowerTransformer uses Yeo-Johnson by default",
+        ],
+        "cons": [
+            "Transformed scale is uninterpretable",
+            "λ must be fitted — can't apply to new data without refitting",
+            "Slightly more complex than log/sqrt",
+        ],
+        "best_for": ["Columns with negative values", "General-purpose normality transformation", "sklearn preprocessing pipelines"],
+    },
+    "Standard Scaling (Z-score)": {
+        "full_name": "Standardisation — Z-score Normalisation",
+        "what": "Transforms each value to z = (x − mean) / std, producing a distribution with mean 0 and std 1.",
+        "when": "Features need to be on the same scale for distance-based models (SVM, KNN, PCA, regularised regression).",
+        "why": "Does NOT change the shape of the distribution — skewness is unchanged. Only shifts and rescales.",
+        "avoid": "When you want to actually fix skewness — use log/sqrt/Box-Cox first, then scale. Also avoid when the model is tree-based (trees are scale-invariant).",
+        "pros": [
+            "Required by many ML algorithms (SVM, KNN, PCA, logistic regression)",
+            "Preserves outlier information (unlike MinMax)",
+            "Interpretable as 'standard deviations from the mean'",
+        ],
+        "cons": [
+            "Does NOT fix skewness",
+            "Sensitive to outliers (outliers pull mean and std)",
+            "Useless for tree-based models",
+        ],
+        "best_for": ["Pre-ML feature scaling", "PCA / dimensionality reduction", "Regularised regression (Ridge, Lasso)"],
+    },
+    "MinMax Scaling [0,1]": {
+        "full_name": "Min-Max Normalisation",
+        "what": "Rescales all values to the [0, 1] range using x_scaled = (x − min) / (max − min).",
+        "when": "Model requires features in a bounded range (neural networks, image pixel values).",
+        "why": "Ensures all features contribute equally when the algorithm is sensitive to absolute magnitude.",
+        "avoid": "When outliers are present — one extreme value compresses all others into a tiny range. Does NOT fix skewness.",
+        "pros": [
+            "Bounded output — always in [0,1]",
+            "Useful for neural networks and gradient-based models",
+            "Preserves exact zero values",
+        ],
+        "cons": [
+            "Extremely sensitive to outliers",
+            "Does NOT change distribution shape or fix skewness",
+            "Range changes if new data has different min/max",
+        ],
+        "best_for": ["Neural networks / deep learning", "Image data normalisation", "Algorithms that need features in [0,1]"],
+    },
+    "Robust Scaling": {
+        "full_name": "Robust Scaler (IQR-based)",
+        "what": "Scales using median and IQR: x_scaled = (x − median) / IQR. Outliers have minimal influence.",
+        "when": "Data has significant outliers that would distort Z-score or MinMax scaling.",
+        "why": "Uses robust statistics (median, IQR) instead of mean and std, so extreme values don't dominate the scaling.",
+        "avoid": "When the algorithm requires a strict [0,1] range — robust scaler doesn't guarantee bounded output.",
+        "pros": [
+            "Robust to outliers — uses median & IQR",
+            "Better than Z-score for skewed data with outliers",
+            "Centred around median (not mean)",
+        ],
+        "cons": [
+            "Output range is unbounded",
+            "Still doesn't fix underlying skewness",
+            "Less commonly understood than Z-score",
+        ],
+        "best_for": ["Numeric columns with known outliers", "When Z-score gives poor results due to outliers", "Pre-processing before outlier-sensitive algorithms"],
+    },
+}
+
+
+# ─────────────────────────────────────────────
+#  CORRELATION METHOD INFO
+# ─────────────────────────────────────────────
+CORRELATION_METHOD_INFO = {
+    "pearson": {
+        "full_name": "Pearson Product-Moment Correlation",
+        "what": "Measures the linear relationship between two continuous variables. Ranges from −1 (perfect negative) to +1 (perfect positive); 0 means no linear relationship.",
+        "when": "Both variables are continuous, approximately normally distributed, and their relationship is expected to be linear.",
+        "why": "The most commonly used correlation; sensitive to the actual magnitude of values, making it the most powerful test when assumptions are met.",
+        "avoid": "Ordinal data, non-linear relationships, or data with significant outliers — Pearson is heavily influenced by extreme values.",
+        "pros": [
+            "Most statistically powerful when normality holds",
+            "Produces a coefficient that is easy to interpret",
+            "Widely used and understood",
+        ],
+        "cons": [
+            "Assumes linearity — misses curved relationships",
+            "Sensitive to outliers",
+            "Assumes approximate normality for significance testing",
+        ],
+        "best_for": ["Continuous numeric columns", "Height vs weight", "Temperature vs energy use", "Linear relationships"],
+    },
+    "spearman": {
+        "full_name": "Spearman Rank Correlation (ρ)",
+        "what": "Measures the monotonic relationship between two variables by ranking the data first, then computing Pearson correlation on the ranks.",
+        "when": "Data is ordinal, non-normally distributed, or the relationship is monotonic but not necessarily linear.",
+        "why": "By converting to ranks, outliers have minimal influence and any monotonic relationship (not just linear) is captured.",
+        "avoid": "When you specifically need to measure the strength of a linear relationship — Spearman will detect any monotonic relationship, which could be misleading.",
+        "pros": [
+            "Robust to outliers",
+            "Works with ordinal data",
+            "Captures any monotonic relationship",
+            "No normality assumption",
+        ],
+        "cons": [
+            "Less powerful than Pearson when normality truly holds",
+            "Detects monotonic but not strictly linear patterns",
+            "Ties in data can reduce accuracy",
+        ],
+        "best_for": ["Skewed distributions", "Ordinal survey data (Likert scales)", "Data with outliers", "Non-linear but monotonic relationships"],
+    },
+    "kendall": {
+        "full_name": "Kendall Rank Correlation (τ)",
+        "what": "Measures ordinal association by comparing all pairs of observations and counting concordant vs discordant pairs.",
+        "when": "Small samples, heavily tied data, or when you need a more conservative (robust) rank-based measure than Spearman.",
+        "why": "Kendall's τ has a more direct probabilistic interpretation (probability of concordance minus probability of discordance) and is more robust with ties.",
+        "avoid": "Large datasets — Kendall is O(n²) and slow. When Spearman is sufficient and speed matters.",
+        "pros": [
+            "Most robust to ties among rank methods",
+            "Direct probability interpretation",
+            "Better for small samples",
+            "More conservative — less likely to overstate correlation",
+        ],
+        "cons": [
+            "Computationally expensive — O(n²)",
+            "Typically produces smaller τ values than Spearman ρ for the same data",
+            "Less familiar to most analysts",
+        ],
+        "best_for": ["Small samples (n < 30)", "Heavy ties in data", "Ordinal variables with few levels", "When a conservative correlation estimate is preferred"],
+    },
+}
+
+
+# ─────────────────────────────────────────────
 #  SESSION STATE
 # ─────────────────────────────────────────────
 if "df_clean" not in st.session_state:
@@ -267,10 +604,10 @@ def metric_card(val, label, color="var(--accent)"):
 
 
 def render_method_card(name, info_dict):
-    """Render a styled info card for an outlier or encoding method."""
-    pros = "".join(f'<li>✅ {p}</li>' for p in info_dict.get("pros", []))
-    cons = "".join(f'<li>❌ {c}</li>' for c in info_dict.get("cons", []))
-    best = "".join(f'<span class="tag">{b}</span>' for b in info_dict.get("best_for", []))
+    """Render a styled info card for an outlier, encoding, or correction method."""
+    pros  = "".join(f'<li>✅ {p}</li>' for p in info_dict.get("pros", []))
+    cons  = "".join(f'<li>❌ {c}</li>' for c in info_dict.get("cons", []))
+    best  = "".join(f'<span class="tag">{b}</span>' for b in info_dict.get("best_for", []))
     avoid = f'<p><b>⚠️ Avoid when:</b> {info_dict["avoid"]}</p>' if "avoid" in info_dict else ""
 
     st.markdown(f"""
@@ -284,6 +621,67 @@ def render_method_card(name, info_dict):
         {('<p><b>Best for:</b> ' + best + '</p>') if best else ''}
     </div>
     """, unsafe_allow_html=True)
+
+
+def _compute_quality_score(df, num_cols_list):
+    """
+    Recomputes the data quality score locally — identical formula to DataPrep Pro's
+    calculate_data_quality_score(), so the gauge always matches the breakdown bars.
+    Returns (score_0_to_100, factor_scores_dict, factor_max_dict).
+    """
+    miss_pct = df.isnull().sum().sum() / df.size * 100 if df.size else 0
+    dup_pct  = df.duplicated().sum() / len(df) * 100 if len(df) else 0
+
+    # Average IQR outlier % across numeric columns
+    avg_out_pct = 0.0
+    if num_cols_list:
+        out_pcts = []
+        for col in num_cols_list:
+            s = df[col].dropna()
+            if len(s) < 4:
+                continue
+            Q1, Q3 = s.quantile(0.25), s.quantile(0.75)
+            IQR = Q3 - Q1
+            lo, hi = Q1 - 1.5 * IQR, Q3 + 1.5 * IQR
+            pct = ((s < lo) | (s > hi)).mean() * 100
+            out_pcts.append(pct)
+        avg_out_pct = float(np.mean(out_pcts)) if out_pcts else 0.0
+
+    # Invalid / domain values (non-negative keyword heuristic matching DataPrep Pro)
+    NON_NEG_KW = ["age", "salary", "income", "revenue", "debt", "experience",
+                   "weight", "height", "price", "cost", "quantity", "amount",
+                   "months", "years", "tumor", "size", "count", "duration",
+                   "population", "rate", "pct", "percent", "score", "grade",
+                   "rank", "distance", "area", "volume", "length", "width"]
+    SIGNED_KW  = ["profit", "loss", "temperature", "balance", "change", "growth",
+                   "return", "difference", "delta", "variance", "gain", "net",
+                   "flow", "deviation", "residual"]
+
+    inv_count = 0
+    for col in num_cols_list:
+        cl = col.lower().replace(" ", "_")
+        if any(kw in cl for kw in SIGNED_KW):
+            continue
+        if any(kw in cl for kw in NON_NEG_KW):
+            inv_count += int((df[col] < 0).sum())
+    inv_pct = inv_count / len(df) * 100 if len(df) else 0
+
+    factor_scores = {
+        "Missing Values (30 pts)":    max(0.0, 30.0 - miss_pct * 0.6),
+        "Duplicates (20 pts)":        max(0.0, 20.0 - dup_pct  * 0.4),
+        "Outliers (20 pts)":          max(0.0, 20.0 - avg_out_pct * 0.4),
+        "Invalid / Domain (15 pts)":  max(0.0, 15.0 - inv_pct  * 0.3),
+        "Consistency (15 pts)":       15.0,
+    }
+    factor_max = {
+        "Missing Values (30 pts)":   30,
+        "Duplicates (20 pts)":       20,
+        "Outliers (20 pts)":         20,
+        "Invalid / Domain (15 pts)": 15,
+        "Consistency (15 pts)":      15,
+    }
+    total = round(min(100.0, sum(factor_scores.values())), 1)
+    return total, factor_scores, factor_max
 
 
 def quality_gauge(score):
@@ -326,7 +724,7 @@ def quality_breakdown_bars(score_dict, max_dict):
     color_fn = lambda p: "#16a34a" if p >= 80 else "#d97706" if p >= 60 else "#dc2626"
     for factor, score_val in score_dict.items():
         max_val = max_dict.get(factor, 100)
-        pct     = round(score_val / max_val * 100, 1)
+        pct     = round(score_val / max_val * 100, 1) if max_val else 0
         color   = color_fn(pct)
         st.markdown(f"""
         <div class="score-breakdown-row">
@@ -443,11 +841,12 @@ with st.sidebar:
         show_grid = st.toggle("Show Grid", value=True)
         template  = "plotly_dark" if dark_mode else "plotly_white"
 
-        # ── Live quality snapshot in sidebar ──────────────────
+        # ── Live quality snapshot in sidebar (uses local recompute) ───────────
         st.markdown("---")
+        qs_sidebar, _, _ = _compute_quality_score(df_work, num_cols)
         rec_sidebar = build_recommendations(df_work, num_cols, cat_cols)
-        sc_s = rec_sidebar["scorecard"]
-        qc   = "#16a34a" if sc_s["score"] >= 80 else "#d97706" if sc_s["score"] >= 60 else "#dc2626"
+        dup_sidebar = rec_sidebar["duplicates"]["count"]
+        qc = "#16a34a" if qs_sidebar >= 80 else "#d97706" if qs_sidebar >= 60 else "#dc2626"
         st.markdown(f"""
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
             <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Live Dataset Stats</div>
@@ -465,15 +864,14 @@ with st.sidebar:
             </div>
             <div style="display:flex;justify-content:space-between;margin:5px 0;">
                 <span style="font-size:0.82rem;color:#64748b;">Duplicates</span>
-                <span style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:#dc2626;">{rec_sidebar["duplicates"]["count"]}</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:#dc2626;">{dup_sidebar}</span>
             </div>
             <div style="margin-top:12px;">
                 <div style="font-size:0.7rem;color:#64748b;margin-bottom:5px;">Quality Score</div>
-                <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;font-weight:700;color:{qc};">{sc_s["score"]}<span style="font-size:0.85rem;font-weight:400;color:#94a3b8;">/100</span></div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;font-weight:700;color:{qc};">{qs_sidebar}<span style="font-size:0.85rem;font-weight:400;color:#94a3b8;">/100</span></div>
                 <div style="background:#f1f5f9;border-radius:6px;height:6px;margin-top:5px;">
-                    <div style="width:{sc_s['score']}%;height:100%;background:{qc};border-radius:6px;"></div>
+                    <div style="width:{qs_sidebar}%;height:100%;background:{qc};border-radius:6px;"></div>
                 </div>
-                <div style="font-size:0.72rem;color:{qc};font-weight:600;margin-top:4px;">Grade: {sc_s["grade"]} &nbsp;·&nbsp; {sc_s["critical"]} critical &nbsp;·&nbsp; {sc_s["warning"]} warnings</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -551,11 +949,7 @@ with tabs[0]:
     dupes = duplicate_rows(df_work)
     c_d1, c_d2 = st.columns(2)
     with c_d1:
-        metric_card(
-            dupes,
-            "Duplicate Rows",
-            "#dc2626" if dupes > 0 else "#16a34a",
-        )
+        metric_card(dupes, "Duplicate Rows", "#dc2626" if dupes > 0 else "#16a34a")
     with c_d2:
         metric_card(
             f"{dupes/len(df_work)*100:.1f}%" if dupes else "0%",
@@ -670,9 +1064,42 @@ with tabs[3]:
     if len(num_cols) < 2:
         st.warning("Need at least 2 numeric columns for correlation.")
     else:
+        # ── Method description expander ────────────────────────
+        with st.expander("📖 Learn about correlation methods — Pearson vs Spearman vs Kendall", expanded=False):
+            corr_method_tabs = st.tabs(list(CORRELATION_METHOD_INFO.keys()))
+            for tab_cm, (m_name, m_info) in zip(corr_method_tabs, CORRELATION_METHOD_INFO.items()):
+                with tab_cm:
+                    render_method_card(m_name, m_info)
+
+        # ── Quick decision helper ──────────────────────────────
+        st.markdown("""
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                    padding:14px 16px;margin:0 0 16px 0;font-size:0.85rem;color:#334155;">
+            <b style="color:#16a34a;">🧭 Quick Guide:</b>
+            &nbsp;<b>Pearson</b> → continuous + normally distributed + linear relationship &nbsp;|&nbsp;
+            <b>Spearman</b> → skewed / ordinal / outliers &nbsp;|&nbsp;
+            <b>Kendall</b> → small samples or many tied values
+        </div>
+        """, unsafe_allow_html=True)
+
         corr_cols   = st.multiselect("Select Columns", num_cols, default=num_cols)
-        corr_method = st.selectbox("Method", ["pearson", "spearman", "kendall"])
+        corr_method = st.selectbox("Correlation Method", ["pearson", "spearman", "kendall"])
         sig_level   = st.slider("Significance Level α", 0.01, 0.10, 0.05, 0.01)
+
+        # Show active method info badge
+        method_info_active = CORRELATION_METHOD_INFO.get(corr_method, {})
+        st.markdown(f"""
+        <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;
+                    padding:10px 14px;margin:8px 0 14px 0;font-size:0.83rem;color:#334155;">
+            <b style="color:#6366f1;">📌 {corr_method.capitalize()}</b> —
+            {method_info_active.get('what','')}<br>
+            <span style="color:#64748b;font-size:0.78rem;">
+                <b>Best for:</b> {"  ·  ".join(method_info_active.get('best_for', []))}
+                &nbsp;|&nbsp;
+                <b>Avoid when:</b> {method_info_active.get('avoid', '—')}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
         if len(corr_cols) >= 2:
             corr_df = df_work[corr_cols].corr(method=corr_method)
@@ -688,10 +1115,24 @@ with tabs[3]:
             st.plotly_chart(fig_c, use_container_width=True)
 
             st.markdown('<div class="section-header">Top Correlations (Ranked)</div>', unsafe_allow_html=True)
-            st.dataframe(
-                correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level),
-                use_container_width=True,
-            )
+            corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
+            st.dataframe(corr_pairs_df, use_container_width=True)
+
+            # ── Interpretation guide ──────────────────────────
+            st.markdown("""
+            <div style="margin-top:16px;padding:14px 16px;background:#fff;border:1px solid #e2e8f0;
+                        border-radius:10px;font-size:0.84rem;color:#334155;">
+                <b>📏 Correlation Strength Guide:</b><br>
+                <span style="color:#dc2626;font-weight:600;">|r| ≥ 0.90</span> — Very strong &nbsp;·&nbsp;
+                <span style="color:#f97316;font-weight:600;">0.70 ≤ |r| &lt; 0.90</span> — Strong &nbsp;·&nbsp;
+                <span style="color:#d97706;font-weight:600;">0.50 ≤ |r| &lt; 0.70</span> — Moderate &nbsp;·&nbsp;
+                <span style="color:#6366f1;font-weight:600;">0.30 ≤ |r| &lt; 0.50</span> — Weak &nbsp;·&nbsp;
+                <span style="color:#16a34a;font-weight:600;">|r| &lt; 0.30</span> — Negligible<br><br>
+                ⚠️ <b>Correlation ≠ Causation.</b>
+                A high correlation between two variables does not mean one causes the other —
+                always check for confounders and use domain knowledge.
+            </div>
+            """, unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════
@@ -823,23 +1264,234 @@ with tabs[4]:
 #  TAB 6 — TRANSFORM
 # ══════════════════════════════════════════════
 with tabs[5]:
-    st.markdown('<div class="section-header">Column Transformations</div>', unsafe_allow_html=True)
+    st.markdown("### 🔄 Skewness Analysis & Transformations")
+    st.caption("Identify distribution shape for every numeric column, then apply the right transformation to fix it.")
+
     if not num_cols:
         st.warning("No numeric columns to transform.")
     else:
-        t_col = st.selectbox("Select Column to Transform", num_cols)
-        transforms = st.multiselect("Transformations to Apply", [
-            "Log (log1p)", "Square Root", "Box-Cox", "Yeo-Johnson",
-            "Standard Scaling (Z-score)", "MinMax Scaling [0,1]", "Robust Scaling",
-        ])
+        # ── A: Skewness overview table ─────────────────────────
+        st.markdown('<div class="section-header">〰️ Skewness Overview — All Numeric Columns</div>',
+                    unsafe_allow_html=True)
 
-        if t_col and transforms:
-            df_transformed, preview, errors = apply_transforms(df_work, t_col, transforms)
-            if preview:
-                st.dataframe(pd.DataFrame(preview).T, use_container_width=True)
-                st.success("Transformations applied. Download from the Export tab.")
+        # Reference card for skewness interpretation
+        with st.expander("📖 How to read skewness — classification guide", expanded=False):
+            cols_sk_ref = st.columns(5)
+            for col_ref, (cls_name, cls_info) in zip(cols_sk_ref, SKEWNESS_CLASSIFICATION.items()):
+                with col_ref:
+                    st.markdown(f"""
+                    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
+                                padding:12px;text-align:center;margin:4px 0;">
+                        <div style="font-size:0.75rem;font-weight:700;color:{cls_info['color']};
+                                    margin-bottom:6px;">{cls_name}</div>
+                        <div style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;
+                                    color:#64748b;background:#f1f5f9;border-radius:6px;
+                                    padding:3px 6px;">{cls_info['range']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            st.markdown("""
+            <div style="margin-top:12px;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;
+                        border-radius:8px;font-size:0.85rem;color:#334155;">
+                <b>Rule of thumb:</b> For ML models that assume normality (linear regression, logistic regression, LDA, Gaussian Naive Bayes),
+                aim for <b>|skewness| &lt; 0.5</b> after transformation.
+                Tree-based models (Random Forest, XGBoost, LightGBM) are <b>not affected by skewness</b>.
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Build skewness table
+        skew_rows = []
+        for col in num_cols:
+            s = df_work[col].dropna()
+            sk = float(s.skew())
+            if sk < -1:        cls = "Highly Left Skewed"
+            elif sk < -0.5:    cls = "Moderately Left Skewed"
+            elif sk <= 0.5:    cls = "Approximately Normal"
+            elif sk <= 1:      cls = "Moderately Right Skewed"
+            else:              cls = "Highly Right Skewed"
+            rec_t = ("Log (log1p)" if sk > 1 else
+                     "Square Root" if sk > 0.5 else
+                     "Yeo-Johnson" if sk < -0.5 else
+                     "None needed")
+            skew_rows.append({
+                "Column": col, "Skewness": round(sk, 4),
+                "Classification": cls, "Recommended Transform": rec_t,
+                "Mean": round(float(s.mean()), 4), "Median": round(float(s.median()), 4),
+                "Std": round(float(s.std()), 4),
+            })
+        skew_df = pd.DataFrame(skew_rows)
+
+        # Colour the Classification column
+        def _colour_cls(val):
+            colour_map = {
+                "Highly Right Skewed":     "background-color:#fef2f2;color:#dc2626;font-weight:600",
+                "Highly Left Skewed":      "background-color:#fef2f2;color:#dc2626;font-weight:600",
+                "Moderately Right Skewed": "background-color:#fffbeb;color:#d97706;font-weight:600",
+                "Moderately Left Skewed":  "background-color:#fffbeb;color:#d97706;font-weight:600",
+                "Approximately Normal":    "background-color:#f0fdf4;color:#16a34a;font-weight:600",
+            }
+            return colour_map.get(val, "")
+
+        st.dataframe(
+            skew_df.style.applymap(_colour_cls, subset=["Classification"]).format(
+                {"Skewness": "{:.4f}", "Mean": "{:.4f}", "Median": "{:.4f}", "Std": "{:.4f}"}
+            ),
+            use_container_width=True, height=min(400, 60 + 35 * len(skew_rows)),
+        )
+
+        # ── B: Per-column distribution charts with skew annotation ──
+        st.markdown('<div class="section-header">📊 Distribution Histograms + KDE</div>',
+                    unsafe_allow_html=True)
+        st.caption("Red dashed line = Mean · Green dotted line = Median · Title colour = skew severity")
+
+        n_plot_cols = 2
+        plot_rows   = [num_cols[i:i+n_plot_cols] for i in range(0, len(num_cols), n_plot_cols)]
+        for row_cols in plot_rows:
+            fig_cols = st.columns(len(row_cols))
+            for fc, col in zip(fig_cols, row_cols):
+                with fc:
+                    s    = df_work[col].dropna()
+                    sk   = float(s.skew())
+                    info = next((r for r in skew_rows if r["Column"] == col), {})
+                    cls  = info.get("Classification", "")
+                    t_color = SKEWNESS_CLASSIFICATION.get(cls, {}).get("color", "#6366f1")
+
+                    try:
+                        from scipy.stats import gaussian_kde as _gkde
+                        fig_h = go.Figure()
+                        fig_h.add_trace(go.Histogram(
+                            x=s, nbinsx=30, name="Distribution",
+                            marker_color="rgba(99,102,241,0.45)",
+                            marker_line=dict(color="rgba(99,102,241,0.8)", width=0.5),
+                        ))
+                        kde_fn = _gkde(s)
+                        xs     = np.linspace(float(s.min()), float(s.max()), 250)
+                        kde_y  = kde_fn(xs) * len(s) * (float(s.max()) - float(s.min())) / 30
+                        fig_h.add_trace(go.Scatter(
+                            x=xs, y=kde_y, mode="lines", name="KDE",
+                            line=dict(color=t_color, width=2.5),
+                        ))
+                        fig_h.add_vline(x=float(s.mean()),   line_dash="dash", line_color="#dc2626", line_width=1.5)
+                        fig_h.add_vline(x=float(s.median()), line_dash="dot",  line_color="#16a34a", line_width=1.5)
+                        fig_h.update_layout(
+                            title=dict(text=f"{col}<br><sup style='color:{t_color}'>{cls} (sk={sk:.3f})</sup>",
+                                       font=dict(size=12)),
+                            template=template, height=280, showlegend=False,
+                            margin=dict(l=10, r=10, t=50, b=30),
+                            paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc",
+                        )
+                        st.plotly_chart(fig_h, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Chart error for '{col}': {e}")
+
+        # ── C: Transformation descriptions ────────────────────────
+        st.markdown('<div class="section-header">📚 Transformation Method Guide</div>',
+                    unsafe_allow_html=True)
+        with st.expander("📖 Learn about every transformation — which one fixes your skew?", expanded=False):
+            transform_tabs = st.tabs(list(SKEWNESS_TRANSFORM_INFO.keys()))
+            for tab_t, (t_name, t_info) in zip(transform_tabs, SKEWNESS_TRANSFORM_INFO.items()):
+                with tab_t:
+                    render_method_card(t_name, t_info)
+
+        # ── D: Apply transformation ────────────────────────────────
+        st.markdown('<div class="section-header">⚡ Apply Transformation</div>', unsafe_allow_html=True)
+
+        t_col_sel   = st.selectbox("Select Column to Transform", num_cols, key="t_col_main")
+        t_col_skew  = next((r["Skewness"] for r in skew_rows if r["Column"] == t_col_sel), 0)
+        t_col_cls   = next((r["Classification"] for r in skew_rows if r["Column"] == t_col_sel), "")
+        t_col_rec   = next((r["Recommended Transform"] for r in skew_rows if r["Column"] == t_col_sel), "")
+
+        sk_color = SKEWNESS_CLASSIFICATION.get(t_col_cls, {}).get("color", "#6366f1")
+        st.markdown(f"""
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;
+                    padding:14px 16px;margin:8px 0 16px 0;display:flex;gap:24px;flex-wrap:wrap;">
+            <div>
+                <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Skewness</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:{sk_color};">{t_col_skew:+.4f}</div>
+            </div>
+            <div>
+                <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Classification</div>
+                <div style="font-size:0.9rem;font-weight:600;color:{sk_color};margin-top:4px;">{t_col_cls}</div>
+            </div>
+            <div>
+                <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;">Recommended</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:0.9rem;font-weight:700;
+                            color:#6366f1;margin-top:4px;">{t_col_rec}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        all_transforms = list(SKEWNESS_TRANSFORM_INFO.keys())
+        default_idx    = all_transforms.index(t_col_rec) if t_col_rec in all_transforms else 0
+        transforms_sel = st.multiselect(
+            "Transformations to Apply (select one or more to compare)",
+            all_transforms,
+            default=[all_transforms[default_idx]],
+            key="transforms_multisel",
+        )
+
+        if t_col_sel and transforms_sel:
+            df_transformed, preview, errors = apply_transforms(df_work, t_col_sel, transforms_sel)
+
             for t_name, err_msg in errors.items():
-                st.warning(f"Could not apply '{t_name}': {err_msg}")
+                st.warning(f"⚠️ Could not apply '{t_name}': {err_msg}")
+
+            if preview:
+                st.markdown("**Before vs After — Summary Statistics:**")
+                before_stats = {
+                    "original": {
+                        "mean":   round(float(df_work[t_col_sel].mean()), 4),
+                        "median": round(float(df_work[t_col_sel].median()), 4),
+                        "std":    round(float(df_work[t_col_sel].std()), 4),
+                        "skew":   round(float(df_work[t_col_sel].skew()), 4),
+                    }
+                }
+                st.dataframe(
+                    pd.DataFrame({**before_stats, **preview}).T
+                    .rename_axis("Transform").reset_index(),
+                    use_container_width=True,
+                )
+
+                # Side-by-side before/after charts
+                chart_cols = st.columns(min(len(transforms_sel) + 1, 4))
+                orig_series = df_work[t_col_sel].dropna()
+                with chart_cols[0]:
+                    fig_b = go.Figure(go.Histogram(
+                        x=orig_series, nbinsx=30,
+                        marker_color="rgba(99,102,241,0.5)", name="Original",
+                    ))
+                    fig_b.update_layout(title=f"Original<br><sup>sk={orig_series.skew():.3f}</sup>",
+                                        template=template, height=240, showlegend=False,
+                                        margin=dict(l=5,r=5,t=45,b=20),
+                                        paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc")
+                    st.plotly_chart(fig_b, use_container_width=True)
+
+                for i, t_name in enumerate(transforms_sel, 1):
+                    if i < len(chart_cols):
+                        col_name = f"{t_col_sel}_{t_name.split()[0].lower()}"
+                        if col_name not in df_transformed.columns:
+                            # Try to find by partial match
+                            matches = [c for c in df_transformed.columns if c.startswith(t_col_sel + "_") and c != t_col_sel]
+                            col_name = matches[i-1] if i-1 < len(matches) else None
+                        if col_name and col_name in df_transformed.columns:
+                            after_s = df_transformed[col_name].dropna()
+                            after_sk = round(float(after_s.skew()), 3)
+                            after_color = ("#16a34a" if abs(after_sk) <= 0.5
+                                           else "#d97706" if abs(after_sk) <= 1
+                                           else "#dc2626")
+                            with chart_cols[i]:
+                                fig_a = go.Figure(go.Histogram(
+                                    x=after_s, nbinsx=30,
+                                    marker_color=f"rgba(22,163,74,0.5)", name=t_name,
+                                ))
+                                fig_a.update_layout(
+                                    title=f"{t_name}<br><sup style='color:{after_color}'>sk={after_sk}</sup>",
+                                    template=template, height=240, showlegend=False,
+                                    margin=dict(l=5,r=5,t=45,b=20),
+                                    paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc",
+                                )
+                                st.plotly_chart(fig_a, use_container_width=True)
+
+                st.success("✅ Transformations previewed above. Download from the Export tab.")
 
 
 # ══════════════════════════════════════════════
@@ -887,6 +1539,14 @@ with tabs[6]:
 
     # ── B: Missing Value Imputation ───────────────────────────
     st.markdown('<div class="section-header">🕳️ Missing Value Imputation</div>', unsafe_allow_html=True)
+
+    # ── NEW: Imputation strategy info expander (mirrors outlier expander style) ──
+    with st.expander("📖 Learn about imputation / correction strategies — which one to choose?", expanded=False):
+        corr_tabs = st.tabs(list(CORRECTION_TYPE_INFO.keys()))
+        for tab_c, (method_name, info) in zip(corr_tabs, CORRECTION_TYPE_INFO.items()):
+            with tab_c:
+                render_method_card(method_name, info)
+
     miss_df = df_clean_work.isna().sum()
     miss_df = miss_df[miss_df > 0]
 
@@ -968,7 +1628,6 @@ with tabs[6]:
     st.markdown('<div class="section-header">📌 Outlier Detection & Treatment</div>',
                 unsafe_allow_html=True)
 
-    # ── Method info expanders ──────────────────────────────────
     with st.expander("📖 Learn about outlier detection methods", expanded=False):
         tabs_out = st.tabs(list(OUTLIER_DETECTION_INFO.keys()))
         for tab_o, (method_name, info) in zip(tabs_out, OUTLIER_DETECTION_INFO.items()):
@@ -1047,7 +1706,6 @@ with tabs[6]:
     st.markdown('<div class="section-header">🤖 Encoding Preview & ML-Ready Export</div>',
                 unsafe_allow_html=True)
 
-    # ── Encoding method info expanders ────────────────────────
     with st.expander("📖 Learn about encoding methods — which one to choose?", expanded=False):
         enc_tabs = st.tabs(list(ENCODING_INFO.keys()))
         for tab_e, (enc_name, info) in zip(enc_tabs, ENCODING_INFO.items()):
@@ -1058,7 +1716,6 @@ with tabs[6]:
         enc_col = st.selectbox("Column to Preview", cat_cols, key="enc_col_select")
 
         if enc_col in cat_cols:
-            # Smart recommendation
             enc_rec = get_best_encoding_recommendation(df_work[enc_col])
             rec_color = "#16a34a" if enc_rec["n_unique"] <= 15 else "#d97706"
             st.markdown(f"""
@@ -1128,24 +1785,48 @@ with tabs[7]:
 
 
 # ══════════════════════════════════════════════
-#  TAB 9 — RECOMMENDATIONS  (with quality gauge)
+#  TAB 9 — RECOMMENDATIONS  (fully rebuilt)
 # ══════════════════════════════════════════════
 with tabs[8]:
     st.markdown("### 💡 Automated Data Recommendations")
     st.caption("Scans your dataset and gives step-by-step, actionable guidance with exact Python code.")
 
     rec = build_recommendations(df_work, num_cols, cat_cols)
-    all_stats  = rec["_all_stats"]
-    miss_pct   = rec["_miss_pct"]
-    sc         = rec["scorecard"]
 
-    # ── Quality Gauge + Scorecard ─────────────────────────────
+    # ── FIXED: recompute score locally so gauge matches breakdown bars ─────────
+    qs_total, factor_scores, factor_max = _compute_quality_score(df_work, num_cols)
+
+    # Derive grade & counts from recomputed score (matches DataPrep Pro logic)
+    def _grade(s):
+        if s >= 90: return "A"
+        if s >= 80: return "B"
+        if s >= 70: return "C"
+        if s >= 60: return "D"
+        return "F"
+
+    # Count critical / warning items from the recommendations dict
+    _n_crit = (
+        (1 if rec["duplicates"]["count"] > 0 and rec["duplicates"]["pct"] > 5 else 0)
+        + sum(1 for m in rec.get("missing", [])    if m["pct"] > 30)
+        + sum(1 for o in rec.get("outliers", [])   if o["pct"] >= 5)
+        + sum(1 for r in rec.get("cardinality", []) if r["n_unique"] == 1)
+    )
+    _n_warn = (
+        (1 if rec["duplicates"]["count"] > 0 and rec["duplicates"]["pct"] <= 5 else 0)
+        + sum(1 for m in rec.get("missing",    []) if 0 < m["pct"] <= 30)
+        + sum(1 for s_r in rec.get("skewness", []) if True)
+        + sum(1 for o in rec.get("outliers",   []) if o["pct"] < 5)
+        + sum(1 for r in rec.get("cardinality",[]) if r["n_unique"] > 50)
+        + sum(1 for r in rec.get("high_corr",  []))
+    )
+
+    # ── Quality Gauge + Scorecard ──────────────────────────────
     st.markdown('<div class="section-header">📊 Data Quality Scorecard</div>', unsafe_allow_html=True)
 
     g_col, b_col = st.columns([1, 1])
 
     with g_col:
-        st.plotly_chart(quality_gauge(sc["score"]), use_container_width=True)
+        st.plotly_chart(quality_gauge(qs_total), use_container_width=True)
 
     with b_col:
         st.markdown("&nbsp;")
@@ -1153,54 +1834,32 @@ with tabs[8]:
         for qw, label, val, col_hex in zip(
             qc_top,
             ["Score", "Grade", "Critical", "Warnings"],
-            [f"{sc['score']}/100", sc["grade"], sc["critical"], sc["warning"]],
-            ["#6366f1", "#16a34a" if sc["grade"] in ("A","B") else "#d97706",
-             "#dc2626" if sc["critical"] else "#16a34a",
-             "#d97706" if sc["warning"] else "#16a34a"],
+            [f"{qs_total}/100", _grade(qs_total), _n_crit, _n_warn],
+            ["#6366f1",
+             "#16a34a" if _grade(qs_total) in ("A","B") else "#d97706",
+             "#dc2626" if _n_crit else "#16a34a",
+             "#d97706" if _n_warn else "#16a34a"],
         ):
             with qw:
                 metric_card(val, label, col_hex)
 
         st.markdown("&nbsp;")
-
-        # Compute per-factor scores for the breakdown bars
-        miss_pct_v  = df_work.isnull().sum().sum() / df_work.size * 100
-        dup_pct_v   = df_work.duplicated().sum() / len(df_work) * 100
-        out_info_v  = rec.get("outliers", [])
-        avg_out_pct = np.mean([o["pct"] for o in out_info_v]) if out_info_v else 0
-        inv_cnt     = sum(r["n_iqr"] for r in out_info_v) if out_info_v else 0
-        inv_pct_v   = inv_cnt / len(df_work) * 100 if len(df_work) else 0
-
-        factor_scores = {
-            "Missing Values (30 pts)":  max(0, 30 - miss_pct_v * 0.6),
-            "Duplicates (20 pts)":      max(0, 20 - dup_pct_v  * 0.4),
-            "Outliers (20 pts)":        max(0, 20 - avg_out_pct * 0.4),
-            "Invalid / Domain (15 pts)": max(0, 15 - inv_pct_v * 0.3),
-            "Consistency (15 pts)":     15.0,
-        }
-        factor_max = {
-            "Missing Values (30 pts)": 30,
-            "Duplicates (20 pts)":     20,
-            "Outliers (20 pts)":       20,
-            "Invalid / Domain (15 pts)": 15,
-            "Consistency (15 pts)":    15,
-        }
         quality_breakdown_bars(factor_scores, factor_max)
 
-    # ── Overall verdict ───────────────────────────────────────
-    total_issues = sc["critical"] + sc["warning"]
-    if sc["score"] >= 90:
+    # ── Overall verdict ────────────────────────────────────────
+    total_issues = _n_crit + _n_warn
+    if qs_total >= 90:
         st.success("🎉 Excellent dataset quality — ready for analysis or modelling!")
-    elif sc["score"] >= 75:
+    elif qs_total >= 75:
         st.info(f"📈 Good quality. Address {total_issues} issue(s) before modelling.")
-    elif sc["score"] >= 60:
-        st.warning(f"⚠️ Moderate quality. {sc['critical']} critical issues need attention.")
+    elif qs_total >= 60:
+        st.warning(f"⚠️ Moderate quality. {_n_crit} critical issues need attention.")
     else:
-        st.error(f"🚨 Poor data quality. {sc['critical']} critical issues must be fixed before modelling.")
+        st.error(f"🚨 Poor data quality. {_n_crit} critical issues must be fixed before modelling.")
 
     st.markdown("---")
 
-    # 1. Duplicates ───────────────────────────────────────────
+    # 1. Duplicates ────────────────────────────────────────────
     st.markdown('<div class="section-header">1️⃣ Duplicate Rows</div>', unsafe_allow_html=True)
     d = rec["duplicates"]
     if d["count"] == 0:
@@ -1215,9 +1874,9 @@ with tabs[8]:
 
     # 2. Missing Values ────────────────────────────────────────
     st.markdown('<div class="section-header">2️⃣ Missing Values</div>', unsafe_allow_html=True)
-    if not rec["missing"]:
+    if not rec.get("missing"):
         render_rec_card("ok", "No missing values", "All columns are complete. ✅")
-    for m in rec["missing"]:
+    for m in rec.get("missing", []):
         col   = m["col"]
         pct_m = m["pct"]
         if pct_m > 30:
@@ -1226,8 +1885,8 @@ with tabs[8]:
                 f"<b>Options:</b><br>"
                 f"• Drop column: <code>df.drop('{col}', axis=1, inplace=True)</code><br>"
                 f"• Impute: <code>df['{col}'].fillna(df['{col}'].median(), inplace=True)</code>")
-        elif m["is_numeric"]:
-            skew_v   = m["skewness"]
+        elif m.get("is_numeric"):
+            skew_v   = m.get("skewness")
             rec_fill = "Median" if skew_v and abs(skew_v) > 1 else "Mean"
             code_val = f"df['{col}'].median()" if rec_fill == "Median" else f"df['{col}'].mean()"
             render_rec_card("warning", f"'{col}' has {pct_m:.1f}% missing",
@@ -1239,12 +1898,12 @@ with tabs[8]:
                 f"• Mode: <code>df['{col}'].fillna(df['{col}'].mode()[0], inplace=True)</code><br>"
                 f"• Unknown: <code>df['{col}'].fillna('Unknown', inplace=True)</code>")
 
-    # 3. Skewness ─────────────────────────────────────────────
+    # 3. Skewness ──────────────────────────────────────────────
     st.markdown('<div class="section-header">3️⃣ Skewness & Normality</div>', unsafe_allow_html=True)
-    if not rec["skewness"]:
+    if not rec.get("skewness"):
         render_rec_card("ok", "All numeric columns have acceptable skewness",
                         "No highly skewed columns detected. ✅")
-    for s_r in rec["skewness"]:
+    for s_r in rec.get("skewness", []):
         col    = s_r["col"]
         skew_v = s_r["skewness"]
         direction = "right (+)" if skew_v > 0 else "left (–)"
@@ -1257,12 +1916,12 @@ with tabs[8]:
             f"   df['{col}_yj'] = pt.fit_transform(df[['{col}']])</code><br>"
             f"3. Re-check: <code>df['{col}_log'].skew()</code> — aim for |skew| &lt; 0.5")
 
-    # 4. Outliers ─────────────────────────────────────────────
+    # 4. Outliers ──────────────────────────────────────────────
     st.markdown('<div class="section-header">4️⃣ Outlier Detection</div>', unsafe_allow_html=True)
-    if not rec["outliers"]:
+    if not rec.get("outliers"):
         render_rec_card("ok", "No significant outliers detected (IQR method)",
                         "All numeric columns look clean. ✅")
-    for o in rec["outliers"]:
+    for o in rec.get("outliers", []):
         col  = o["col"]
         lo_f = o["lo"]; hi_f = o["hi"]
         render_rec_card(
@@ -1275,10 +1934,10 @@ with tabs[8]:
             f"  df.loc[mask,'{col}']=df['{col}'].median()</code><br>"
             f"• Remove: <code>df=df[~mask].reset_index(drop=True)</code>")
 
-    # 5. Cardinality ──────────────────────────────────────────
+    # 5. Cardinality ───────────────────────────────────────────
     st.markdown('<div class="section-header">5️⃣ Categorical Cardinality</div>', unsafe_allow_html=True)
-    card_high  = [r for r in rec["cardinality"] if r["n_unique"] > 50]
-    card_const = [r for r in rec["cardinality"] if r["n_unique"] == 1]
+    card_high  = [r for r in rec.get("cardinality", []) if r["n_unique"] > 50]
+    card_const = [r for r in rec.get("cardinality", []) if r["n_unique"] == 1]
     if not card_high and not card_const:
         render_rec_card("ok", "Categorical cardinality is acceptable",
                         "All categorical columns have manageable unique counts. ✅")
@@ -1295,11 +1954,11 @@ with tabs[8]:
             f"• Group rare: <code>top=df['{col}'].value_counts().head(20).index<br>"
             f"  df['{col}']=df['{col}'].where(df['{col}'].isin(top),other='Other')</code>")
 
-    # 6. Low Variance ─────────────────────────────────────────
+    # 6. Low Variance ──────────────────────────────────────────
     st.markdown('<div class="section-header">6️⃣ Low / Zero Variance Columns</div>', unsafe_allow_html=True)
-    if not rec["low_variance"]:
+    if not rec.get("low_variance"):
         render_rec_card("ok", "All numeric columns have adequate variance", "✅")
-    for r in rec["low_variance"]:
+    for r in rec.get("low_variance", []):
         col = r["col"]
         if r["std"] < 1e-6:
             render_rec_card("critical", f"'{col}' has zero variance (constant)",
@@ -1308,12 +1967,12 @@ with tabs[8]:
             render_rec_card("info", f"'{col}' has very low variance (CV = {r['cv_pct']}%)",
                 "Consider whether this column is meaningful before including in models.")
 
-    # 7. Class Imbalance ──────────────────────────────────────
+    # 7. Class Imbalance ───────────────────────────────────────
     st.markdown('<div class="section-header">7️⃣ Class Distribution (Categorical)</div>', unsafe_allow_html=True)
-    if not rec["imbalance"]:
+    if not rec.get("imbalance"):
         render_rec_card("ok", "No severe class imbalance detected",
                         "Categorical columns look balanced. ✅")
-    for r in rec["imbalance"]:
+    for r in rec.get("imbalance", []):
         col = r["col"]; dom_val = r["dominant_val"]; pct_i = r["dominant_pct"]
         render_rec_card(
             "critical" if pct_i >= 90 else "warning",
@@ -1324,14 +1983,14 @@ with tabs[8]:
             f"• Use <code>class_weight='balanced'</code> in sklearn models<br>"
             f"• Evaluate with F1, AUC-ROC instead of accuracy")
 
-    # 8. Multicollinearity ────────────────────────────────────
+    # 8. Multicollinearity ─────────────────────────────────────
     if len(num_cols) >= 2:
         st.markdown('<div class="section-header">8️⃣ Multicollinearity (High Correlation)</div>',
                     unsafe_allow_html=True)
-        if not rec["high_corr"]:
+        if not rec.get("high_corr"):
             render_rec_card("ok", "No highly correlated pairs (r > 0.85)",
                             "No multicollinearity risk detected. ✅")
-        for r in rec["high_corr"]:
+        for r in rec.get("high_corr", []):
             c1n = r["col_a"]; c2n = r["col_b"]; r_val = r["r"]
             render_rec_card("warning", f"High correlation: '{c1n}' ↔ '{c2n}' (r = {r_val})",
                 f"Multicollinearity can destabilise linear models.<br>"
@@ -1340,9 +1999,9 @@ with tabs[8]:
                 f"• Use PCA to combine correlated features<br>"
                 f"• Use regularisation (Ridge/Lasso)")
 
-    # 9. EDA Checklist ────────────────────────────────────────
+    # 9. EDA Checklist ─────────────────────────────────────────
     st.markdown('<div class="section-header">✅ Complete EDA Checklist</div>', unsafe_allow_html=True)
-    for item, done in rec["checklist"]:
+    for item, done in rec.get("checklist", []):
         badge_cls = "badge-ok" if done else "badge-warn"
         icon      = "✅" if done else "⬜"
         st.markdown(
