@@ -386,6 +386,197 @@ def impute_column(df: pd.DataFrame, col: str, method: str,
     return df
 
 
+# ─────────────────────────────────────────────
+#  METHOD & ENCODING METADATA
+#  (Pure data — no Streamlit; rendered in app.py)
+# ─────────────────────────────────────────────
+
+OUTLIER_DETECTION_INFO = {
+    "IQR (1.5×IQR)": {
+        "full_name": "Interquartile Range Method",
+        "what": (
+            "Computes Q1 (25th percentile) and Q3 (75th percentile). "
+            "Any value below Q1 − 1.5×IQR or above Q3 + 1.5×IQR is flagged as an outlier."
+        ),
+        "why": (
+            "IQR is resistant to the influence of extreme values themselves, making it "
+            "robust for skewed distributions. Unlike Z-score, it does not assume normality."
+        ),
+        "when": (
+            "Use when your data is skewed, has heavy tails, or you don't know the "
+            "distribution. Ideal for exploratory analysis as a first-pass outlier check."
+        ),
+        "pros": ["Does not assume normality", "Simple and interpretable", "Works well on skewed data"],
+        "cons": ["May miss outliers in very heavy-tailed distributions", "Fixed 1.5× multiplier may be too strict/lenient"],
+    },
+    "Z-Score (|z| > 3)": {
+        "full_name": "Standard Score / Z-Score Method",
+        "what": (
+            "Standardises each value as z = (x − mean) / std. "
+            "Any observation with |z| > 3 is considered an outlier (covers ~99.7% of a normal distribution)."
+        ),
+        "why": (
+            "When data is approximately normally distributed, the Z-score directly "
+            "measures how many standard deviations a point lies from the mean — a natural outlier signal."
+        ),
+        "when": (
+            "Use when your data is roughly normally distributed and sample size is large (n > 30). "
+            "Avoid on highly skewed or heavy-tailed data — the mean and std are themselves distorted by outliers."
+        ),
+        "pros": ["Mathematically straightforward", "Widely understood", "Good for symmetric distributions"],
+        "cons": ["Sensitive to the very outliers it's trying to detect", "Unreliable on skewed or non-normal data"],
+    },
+}
+
+OUTLIER_ACTION_INFO = {
+    "Cap / Winsorise (clip to fences)": {
+        "what": "Replaces any value below the lower fence with the lower fence, and any value above the upper fence with the upper fence.",
+        "when": "Use when you want to keep all rows but limit extreme influence. Common in financial and sensor data.",
+        "effect": "Preserves row count. Reduces the range of the variable.",
+    },
+    "Fill with Mean": {
+        "what": "Replaces outlier values with the column mean.",
+        "when": "Use only if data is roughly symmetric (low skewness) and outliers are likely data-entry errors.",
+        "effect": "Pulls extreme values to the centre. Mean is sensitive to other outliers still present.",
+    },
+    "Fill with Median": {
+        "what": "Replaces outlier values with the column median.",
+        "when": "Best choice for skewed distributions or when you suspect outliers are measurement errors.",
+        "effect": "Robust replacement — median is unaffected by the outliers themselves.",
+    },
+    "Fill with Mode": {
+        "what": "Replaces outlier values with the most frequent value in the column.",
+        "when": "Rarely used for continuous numeric columns; more appropriate for discrete/ordinal data.",
+        "effect": "Forces outliers to the most common value, which may not be meaningful.",
+    },
+    "Remove rows with outliers": {
+        "what": "Drops the entire row for any observation flagged as an outlier.",
+        "when": "Use only if you are confident outliers are data errors (not real but extreme events). Risky if many outliers exist.",
+        "effect": "Reduces dataset size. Can introduce selection bias if outliers are genuine.",
+    },
+}
+
+ENCODING_INFO = {
+    "Label Encoding": {
+        "what": "Assigns each unique category an integer (0, 1, 2, …) in alphabetical or appearance order.",
+        "when": "Use for ordinal categories where order is meaningful (e.g. Low=0, Medium=1, High=2). "
+                "Also acceptable as input to tree-based models (Decision Trees, Random Forests, XGBoost).",
+        "avoid": "Avoid for nominal (unordered) categories with linear models — the integer order implies a false ranking.",
+        "pros": ["Memory efficient — single column", "Works with tree models"],
+        "cons": ["Implies ordinal relationship where none may exist"],
+        "best_for": ["Tree-based models (RF, XGBoost, LightGBM)", "Ordinal features"],
+    },
+    "One-Hot Encoding": {
+        "what": "Creates one binary (0/1) column per unique category. Exactly one column is 1 per row.",
+        "when": "Use for nominal (unordered) categories with linear or distance-based models "
+                "(Logistic Regression, SVM, KNN, Neural Networks).",
+        "avoid": "Avoid when cardinality is high (>15–20 categories) — creates too many sparse columns.",
+        "pros": ["No false ordinal relationship", "Works with all linear models"],
+        "cons": ["Explodes dimensionality with high cardinality", "Creates sparse matrix"],
+        "best_for": ["Logistic Regression", "SVM", "KNN", "Neural Networks", "Low-cardinality columns"],
+    },
+    "Frequency Encoding": {
+        "what": "Replaces each category with its relative frequency (proportion of rows it appears in).",
+        "when": "Excellent for high-cardinality columns where rarer categories should have lower weight. "
+                "Works well with gradient boosting models.",
+        "avoid": "Avoid if two different categories happen to have the same frequency — they become indistinguishable.",
+        "pros": ["Handles high cardinality", "Preserves frequency signal", "No dimensionality increase"],
+        "cons": ["Collisions when frequencies are equal", "Loses category identity"],
+        "best_for": ["XGBoost", "LightGBM", "High-cardinality columns", "Memory-constrained settings"],
+    },
+    "Ordinal Encoding": {
+        "what": "Similar to Label Encoding but allows you to explicitly specify the order of categories.",
+        "when": "Use when the feature is genuinely ordinal and you know the correct order "
+                "(e.g. Education: Primary < Secondary < Graduate < Postgraduate).",
+        "avoid": "Avoid for nominal features — always define the order explicitly rather than relying on alphabetical defaults.",
+        "pros": ["Preserves meaningful order", "Single column output"],
+        "cons": ["Requires manual order specification", "Wrong order = wrong signal"],
+        "best_for": ["Genuinely ordinal features", "Tree-based and linear models"],
+    },
+}
+
+
+def get_best_encoding_recommendation(s: pd.Series) -> dict:
+    """
+    Analyse a categorical Series and return a dict with the recommended encoding and rationale.
+    """
+    n_unique = s.nunique()
+    n_total  = len(s.dropna())
+    pct_unique = n_unique / n_total * 100 if n_total else 0
+
+    # Check if it looks ordinal (simple heuristic — presence of ordered keywords)
+    ordinal_keywords = {"low","medium","high","small","large","poor","fair","good","excellent",
+                        "never","rarely","sometimes","often","always","primary","secondary","graduate"}
+    vals_lower = {str(v).lower() for v in s.dropna().unique()}
+    looks_ordinal = bool(vals_lower & ordinal_keywords)
+
+    if looks_ordinal:
+        rec = "Ordinal Encoding"
+        reason = ("Category values appear to have a natural order (ordinal keywords detected). "
+                  "Use Ordinal Encoding and define the explicit order.")
+    elif n_unique == 2:
+        rec = "Label Encoding"
+        reason = "Binary column (2 categories). Label Encoding (0/1) is the most efficient and widely compatible choice."
+    elif n_unique <= 15:
+        rec = "One-Hot Encoding"
+        reason = (f"Low cardinality ({n_unique} unique values). One-Hot Encoding is safe — "
+                  f"it avoids imposing false ordinal relationships and works with all model types.")
+    elif n_unique <= 50:
+        rec = "Frequency Encoding"
+        reason = (f"Medium cardinality ({n_unique} unique values). One-Hot would create too many columns. "
+                  f"Frequency Encoding is efficient and preserves the frequency signal for gradient boosting models.")
+    else:
+        rec = "Frequency Encoding"
+        reason = (f"High cardinality ({n_unique} unique values, {pct_unique:.1f}% of rows are unique). "
+                  f"One-Hot Encoding would create {n_unique} new columns — too many. "
+                  f"Frequency Encoding is the safest default; consider Target Encoding if you have a label column.")
+
+    return {
+        "recommended": rec,
+        "reason": reason,
+        "n_unique": n_unique,
+        "pct_unique": round(pct_unique, 2),
+    }
+
+
+# ─────────────────────────────────────────────
+#  OUTLIER VISUALISATION DATA
+# ─────────────────────────────────────────────
+
+def outlier_chart_data(df: pd.DataFrame, col: str) -> dict:
+    """
+    Return pre-computed data needed to render outlier charts for a column.
+    Returns a dict with:
+      - raw: Series of non-null values
+      - lo, hi: IQR fence values
+      - z_lo, z_hi: Z-score fence values (mean ± 3*std)
+      - is_outlier_iqr: boolean Series
+      - is_outlier_z: boolean Series
+      - stats: from numeric_full_stats
+    """
+    s = df[col].dropna()
+    lo, hi, iqr_v  = iqr_fences(s)
+    mean_v = s.mean(); std_v = s.std()
+    z_lo   = mean_v - 3 * std_v
+    z_hi   = mean_v + 3 * std_v
+
+    z_scores       = np.abs(stats.zscore(s))
+    is_out_iqr     = (s < lo) | (s > hi)
+    is_out_z       = z_scores > 3
+
+    return {
+        "raw":           s,
+        "lo":            lo,
+        "hi":            hi,
+        "z_lo":          z_lo,
+        "z_hi":          z_hi,
+        "is_outlier_iqr": is_out_iqr,
+        "is_outlier_z":   pd.Series(is_out_z, index=s.index),
+        "z_scores":       pd.Series(z_scores, index=s.index),
+        "stats":          numeric_full_stats(s),
+    }
+
+
 def treat_outliers(df: pd.DataFrame, col: str,
                    detection: str = "iqr",
                    action: str = "cap") -> tuple[pd.DataFrame, int, str]:
