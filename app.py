@@ -29,6 +29,8 @@ from processing import (
     remove_duplicates, impute_column, treat_outliers,
     apply_transforms, encoding_preview,
     build_recommendations,
+    OUTLIER_DETECTION_INFO, OUTLIER_ACTION_INFO, ENCODING_INFO,
+    get_best_encoding_recommendation,
 )
 
 warnings.filterwarnings("ignore")
@@ -46,23 +48,187 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-    .block-container { padding: 1.5rem 2rem; }
-    .stTabs [data-baseweb="tab"] { font-size: 0.85rem; font-weight: 600; letter-spacing: 0.04em; }
-    .metric-card {
-        background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
-        padding: 1rem 1.2rem; margin-bottom: 0.5rem;
-    }
-    .section-header {
-        font-size: 1.05rem; font-weight: 700; color: #1e293b;
-        border-left: 4px solid #6366f1; padding-left: 0.7rem; margin: 1.2rem 0 0.8rem;
-    }
-    .rec-card        { background: linear-gradient(135deg,#f0f9ff,#e0f2fe); border: 1px solid #bae6fd; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; }
-    .rec-card-warn   { background: linear-gradient(135deg,#fffbeb,#fef3c7); border: 1px solid #fde68a; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; }
-    .rec-card-danger { background: linear-gradient(135deg,#fff1f2,#ffe4e6); border: 1px solid #fecdd3; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; }
-    .rec-card-ok     { background: linear-gradient(135deg,#f0fdf4,#dcfce7); border: 1px solid #bbf7d0; border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 0.6rem; }
-    code { font-family: 'DM Mono', monospace; background:#f1f5f9; padding:2px 5px; border-radius:4px; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+:root {
+    --bg: #f8fafc;
+    --surface: #ffffff;
+    --surface2: #f1f5f9;
+    --border: #e2e8f0;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --accent-light: #eef2ff;
+    --success: #16a34a;
+    --success-light: #f0fdf4;
+    --warning: #d97706;
+    --warning-light: #fffbeb;
+    --danger: #dc2626;
+    --danger-light: #fef2f2;
+    --text: #0f172a;
+    --text2: #334155;
+    --muted: #64748b;
+    --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.04);
+}
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+    background-color: var(--bg) !important;
+    color: var(--text) !important;
+}
+
+.stApp { background: var(--bg) !important; }
+.block-container { padding: 1.5rem 2rem !important; }
+
+[data-testid="stSidebar"] {
+    background: var(--surface) !important;
+    border-right: 1px solid var(--border) !important;
+}
+[data-testid="stSidebar"] * { color: var(--text) !important; }
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: var(--surface2) !important;
+    border-radius: 10px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    gap: 2px;
+}
+.stTabs [data-baseweb="tab"] {
+    font-size: 0.82rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.03em;
+    color: var(--muted) !important;
+    border-radius: 7px !important;
+    padding: 8px 14px !important;
+}
+.stTabs [aria-selected="true"] {
+    background: var(--accent) !important;
+    color: white !important;
+}
+
+/* ── Section Header ── */
+.section-header {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--accent);
+    border-left: 3px solid var(--accent);
+    padding: 8px 14px;
+    background: var(--accent-light);
+    border-radius: 0 8px 8px 0;
+    margin: 20px 0 14px 0;
+}
+
+/* ── Metric Card ── */
+.metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    text-align: center;
+    box-shadow: var(--shadow);
+}
+.metric-card .val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--accent);
+    display: block;
+}
+.metric-card .lbl {
+    font-size: 0.72rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+}
+
+/* ── Badges ── */
+.badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+}
+.badge-ok      { background: var(--success-light); color: var(--success);  border: 1px solid #bbf7d0; }
+.badge-warn    { background: var(--warning-light);  color: var(--warning);  border: 1px solid #fde68a; }
+.badge-danger  { background: var(--danger-light);   color: var(--danger);   border: 1px solid #fecaca; }
+.badge-info    { background: var(--accent-light);   color: var(--accent);   border: 1px solid #c7d2fe; }
+
+/* ── Info / Method Cards ── */
+.method-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow);
+}
+.method-card h4 {
+    margin: 0 0 8px 0 !important;
+    color: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.method-card p, .method-card li {
+    font-size: 0.85rem;
+    color: var(--text2);
+    margin: 4px 0;
+}
+.method-card .tag {
+    display: inline-block;
+    background: var(--surface2);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 2px 2px 0 0;
+}
+
+/* ── Rec Cards ── */
+.rec-card        { background: linear-gradient(135deg,#f0f9ff,#e0f2fe); border:1px solid #bae6fd; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+.rec-card-warn   { background: linear-gradient(135deg,#fffbeb,#fef3c7); border:1px solid #fde68a; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+.rec-card-danger { background: linear-gradient(135deg,#fff1f2,#ffe4e6); border:1px solid #fecdd3; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+.rec-card-ok     { background: linear-gradient(135deg,#f0fdf4,#dcfce7); border:1px solid #bbf7d0; border-radius:10px; padding:14px 16px; margin-bottom:10px; }
+
+/* ── Progress Bar ── */
+.progress-wrap { background: var(--surface2); border-radius: 8px; height: 8px; overflow: hidden; margin: 5px 0; }
+.progress-fill { height: 100%; border-radius: 8px; }
+
+/* ── Score Panel ── */
+.score-breakdown-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    margin: 6px 0;
+}
+
+/* ── Buttons ── */
+.stButton > button {
+    background: linear-gradient(135deg, var(--accent), var(--accent2)) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+}
+
+code {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--surface2);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: var(--accent);
+}
+
+div.stAlert { border-radius: 10px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -77,9 +243,118 @@ if "clean_log" not in st.session_state:
 
 
 # ─────────────────────────────────────────────
+#  HELPER RENDERERS
+# ─────────────────────────────────────────────
+
+def render_rec_card(level, title, body):
+    cls_map  = {"critical": "rec-card-danger", "warning": "rec-card-warn",
+                "ok": "rec-card-ok", "info": "rec-card"}
+    icon_map = {"critical": "🔴", "warning": "🟡", "ok": "🟢", "info": "🔵"}
+    st.markdown(
+        f'<div class="{cls_map.get(level, "rec-card")}">'
+        f'<b>{icon_map.get(level, "ℹ️")} {title}</b><br>'
+        f'<span style="font-size:0.85rem;color:#334155;">{body}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def metric_card(val, label, color="var(--accent)"):
+    st.markdown(
+        f'<div class="metric-card"><span class="val" style="color:{color};">{val}</span>'
+        f'<span class="lbl">{label}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def render_method_card(name, info_dict):
+    """Render a styled info card for an outlier or encoding method."""
+    pros = "".join(f'<li>✅ {p}</li>' for p in info_dict.get("pros", []))
+    cons = "".join(f'<li>❌ {c}</li>' for c in info_dict.get("cons", []))
+    best = "".join(f'<span class="tag">{b}</span>' for b in info_dict.get("best_for", []))
+    avoid = f'<p><b>⚠️ Avoid when:</b> {info_dict["avoid"]}</p>' if "avoid" in info_dict else ""
+
+    st.markdown(f"""
+    <div class="method-card">
+        <h4>📌 {name}</h4>
+        <p><b>What it does:</b> {info_dict.get('what', info_dict.get('full_name',''))}</p>
+        <p><b>Use when:</b> {info_dict.get('when', '')}</p>
+        <p><b>Why:</b> {info_dict.get('why', info_dict.get('effect', ''))}</p>
+        {avoid}
+        {"<ul>" + pros + cons + "</ul>" if pros or cons else ""}
+        {('<p><b>Best for:</b> ' + best + '</p>') if best else ''}
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def quality_gauge(score):
+    """Render a Plotly gauge for the quality score."""
+    color = "#16a34a" if score >= 80 else "#d97706" if score >= 60 else "#dc2626"
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number",
+        value=score,
+        domain={"x": [0, 1], "y": [0, 1]},
+        title={"text": "Data Quality Score", "font": {"size": 16, "family": "Inter"}},
+        number={"font": {"color": color, "size": 52, "family": "JetBrains Mono"}},
+        gauge={
+            "axis": {"range": [0, 100], "tickwidth": 1},
+            "bar":  {"color": color, "thickness": 0.25},
+            "bgcolor": "#f1f5f9",
+            "borderwidth": 0,
+            "steps": [
+                {"range": [0,  40], "color": "#fee2e2"},
+                {"range": [40, 70], "color": "#fef9c3"},
+                {"range": [70, 100], "color": "#dcfce7"},
+            ],
+            "threshold": {
+                "line": {"color": "#1e293b", "width": 3},
+                "thickness": 0.75,
+                "value": score,
+            },
+        },
+    ))
+    fig.update_layout(
+        template="plotly_white",
+        height=260,
+        margin=dict(l=20, r=20, t=40, b=10),
+        paper_bgcolor="#ffffff",
+    )
+    return fig
+
+
+def quality_breakdown_bars(score_dict, max_dict):
+    """Render per-factor progress bars for the quality scorecard."""
+    color_fn = lambda p: "#16a34a" if p >= 80 else "#d97706" if p >= 60 else "#dc2626"
+    for factor, score_val in score_dict.items():
+        max_val = max_dict.get(factor, 100)
+        pct     = round(score_val / max_val * 100, 1)
+        color   = color_fn(pct)
+        st.markdown(f"""
+        <div class="score-breakdown-row">
+            <span style="font-size:0.85rem;color:#334155;font-weight:500;">{factor}</span>
+            <div style="flex:1;margin:0 16px;">
+                <div class="progress-wrap">
+                    <div class="progress-fill" style="width:{pct}%;background:{color};"></div>
+                </div>
+            </div>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:0.85rem;
+                         color:{color};font-weight:700;min-width:60px;text-align:right;">
+                {round(score_val,1)}&nbsp;/&nbsp;{max_dict[factor]}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
 #  SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
+    st.markdown("""
+    <div style="text-align:center;padding:20px 0 24px;">
+        <div style="font-size:1.3rem;font-weight:700;color:#6366f1;">📊 Analytics Workbench</div>
+        <div style="font-size:0.75rem;color:#64748b;margin-top:4px;">Descriptive EDA · Clean · Export</div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.markdown("## 📂 Dataset")
     upload_mode = st.radio("Mode", ["Single File", "Multiple Files (Merge)"], horizontal=True)
 
@@ -132,7 +407,7 @@ with st.sidebar:
         if dtype_mode:
             dtype_map = {}
             for c in df_work.columns:
-                cur = str(df_work[c].dtype)
+                cur    = str(df_work[c].dtype)
                 choice = st.selectbox(
                     f"'{c}' ({cur})", ["(keep)","numeric","string","category","datetime"],
                     key=f"dt_{c}"
@@ -168,12 +443,56 @@ with st.sidebar:
         show_grid = st.toggle("Show Grid", value=True)
         template  = "plotly_dark" if dark_mode else "plotly_white"
 
+        # ── Live quality snapshot in sidebar ──────────────────
+        st.markdown("---")
+        rec_sidebar = build_recommendations(df_work, num_cols, cat_cols)
+        sc_s = rec_sidebar["scorecard"]
+        qc   = "#16a34a" if sc_s["score"] >= 80 else "#d97706" if sc_s["score"] >= 60 else "#dc2626"
+        st.markdown(f"""
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
+            <div style="font-size:0.7rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Live Dataset Stats</div>
+            <div style="display:flex;justify-content:space-between;margin:5px 0;">
+                <span style="font-size:0.82rem;color:#64748b;">Rows</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;">{len(df_work):,}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin:5px 0;">
+                <span style="font-size:0.82rem;color:#64748b;">Columns</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;">{len(df_work.columns)}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin:5px 0;">
+                <span style="font-size:0.82rem;color:#64748b;">Missing</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:#d97706;">{df_work.isnull().sum().sum():,}</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin:5px 0;">
+                <span style="font-size:0.82rem;color:#64748b;">Duplicates</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:0.82rem;font-weight:700;color:#dc2626;">{rec_sidebar["duplicates"]["count"]}</span>
+            </div>
+            <div style="margin-top:12px;">
+                <div style="font-size:0.7rem;color:#64748b;margin-bottom:5px;">Quality Score</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;font-weight:700;color:{qc};">{sc_s["score"]}<span style="font-size:0.85rem;font-weight:400;color:#94a3b8;">/100</span></div>
+                <div style="background:#f1f5f9;border-radius:6px;height:6px;margin-top:5px;">
+                    <div style="width:{sc_s['score']}%;height:100%;background:{qc};border-radius:6px;"></div>
+                </div>
+                <div style="font-size:0.72rem;color:{qc};font-weight:600;margin-top:4px;">Grade: {sc_s["grade"]} &nbsp;·&nbsp; {sc_s["critical"]} critical &nbsp;·&nbsp; {sc_s["warning"]} warnings</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
 
 # ─────────────────────────────────────────────
 #  MAIN AREA
 # ─────────────────────────────────────────────
-st.title("📊 Descriptive Analytics Workbench")
-st.caption("Upload your dataset → explore → clean → transform → export → stay ML-ready.")
+st.markdown("""
+<div style="background:linear-gradient(135deg,#4338ca 0%,#6366f1 60%,#8b5cf6 100%);
+            border-radius:16px;padding:28px 32px;margin-bottom:24px;">
+    <h1 style="font-family:'Inter',sans-serif;font-size:1.8rem;font-weight:700;color:#fff;margin:0;">
+        📊 Descriptive Analytics Workbench
+    </h1>
+    <p style="color:rgba(255,255,255,0.75);margin:6px 0 0;font-size:0.95rem;">
+        Upload → Explore → Clean → Transform → Export · Stay ML-ready.
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
 if df_raw is None:
     st.info("⬅️  Upload a CSV or Excel file from the sidebar to get started.")
@@ -199,12 +518,17 @@ tabs = st.tabs([
 # ══════════════════════════════════════════════
 with tabs[0]:
     st.markdown('<div class="section-header">Dataset Snapshot</div>', unsafe_allow_html=True)
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Rows",        f"{df_work.shape[0]:,}")
-    c2.metric("Columns",     f"{df_work.shape[1]:,}")
-    c3.metric("Numeric",     len(num_cols))
-    c4.metric("Categorical", len(cat_cols))
 
+    cols_m = st.columns(5)
+    for col_w, label, val in zip(cols_m,
+        ["Rows", "Columns", "Numeric", "Categorical", "Missing %"],
+        [f"{df_work.shape[0]:,}", f"{df_work.shape[1]:,}", str(len(num_cols)),
+         str(len(cat_cols)),
+         f"{df_work.isnull().sum().sum() / df_work.size * 100:.1f}%"]):
+        with col_w:
+            metric_card(val, label)
+
+    st.markdown("&nbsp;")
     st.dataframe(df_work.head(50), use_container_width=True)
 
     st.markdown('<div class="section-header">Data Types & Quality</div>', unsafe_allow_html=True)
@@ -213,19 +537,31 @@ with tabs[0]:
     st.markdown('<div class="section-header">Missing Values</div>', unsafe_allow_html=True)
     miss = missing_summary(df_work)
     if miss.empty:
-        st.success("✅ No missing values found!")
+        st.markdown('<span class="badge badge-ok">✅ No missing values found</span>', unsafe_allow_html=True)
     else:
         fig = px.bar(x=miss.index, y=miss.values,
                      labels={"x": "Column", "y": "Missing Count"},
                      color=miss.values, color_continuous_scale=palette,
                      template=template, height=int(chart_h // 1.5))
-        fig.update_layout(font_size=font_sz, showlegend=False)
+        fig.update_layout(font_size=font_sz, showlegend=False,
+                          paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc")
         st.plotly_chart(fig, use_container_width=True)
 
     st.markdown('<div class="section-header">Duplicate Analysis</div>', unsafe_allow_html=True)
     dupes = duplicate_rows(df_work)
-    st.metric("Duplicate Rows", dupes,
-              delta=f"{dupes/len(df_work)*100:.1f}% of data" if dupes else "Clean ✅")
+    c_d1, c_d2 = st.columns(2)
+    with c_d1:
+        metric_card(
+            dupes,
+            "Duplicate Rows",
+            "#dc2626" if dupes > 0 else "#16a34a",
+        )
+    with c_d2:
+        metric_card(
+            f"{dupes/len(df_work)*100:.1f}%" if dupes else "0%",
+            "Duplicate %",
+            "#dc2626" if dupes > 0 else "#16a34a",
+        )
     if dupes:
         st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
 
@@ -300,8 +636,13 @@ with tabs[2]:
                 st.dataframe(frequency_table(s), use_container_width=True)
 
             if "Cardinality" in cat_analyses:
-                st.metric(f"Unique Values in '{col}'", s.nunique(),
-                          delta="High Cardinality ⚠️" if s.nunique() > 50 else "Normal ✅")
+                n_u = s.nunique()
+                badge_cls = "badge-warn" if n_u > 50 else "badge-ok"
+                st.markdown(
+                    f'Unique values: <span class="badge {badge_cls}">{n_u} &nbsp; '
+                    f'{"High Cardinality ⚠️" if n_u > 50 else "Normal ✅"}</span>',
+                    unsafe_allow_html=True,
+                )
 
             if "Dominant Category" in cat_analyses:
                 vcp = s.value_counts(normalize=True) * 100
@@ -311,7 +652,7 @@ with tabs[2]:
             if "Rare Categories (<1%)" in cat_analyses:
                 rare = rare_categories(s)
                 if rare.empty:
-                    st.success("No rare categories found.")
+                    st.markdown('<span class="badge badge-ok">✅ No rare categories</span>', unsafe_allow_html=True)
                 else:
                     st.warning(f"{len(rare)} rare categories (<1%):")
                     st.dataframe(rare)
@@ -363,9 +704,9 @@ with tabs[4]:
         "Line Chart", "Area Chart", "Pair Plot",
         "ECDF Plot", "QQ Plot", "Heatmap (Correlation)",
     ])
-    col_x      = st.selectbox("X / Primary Column", df_work.columns.tolist())
-    col_y      = st.selectbox("Y Column (if needed)", ["None"] + df_work.columns.tolist())
-    col_color  = st.selectbox("Color By (optional)", ["None"] + cat_cols)
+    col_x          = st.selectbox("X / Primary Column", df_work.columns.tolist())
+    col_y          = st.selectbox("Y Column (if needed)", ["None"] + df_work.columns.tolist())
+    col_color      = st.selectbox("Color By (optional)", ["None"] + cat_cols)
     chart_title    = st.text_input("Chart Title", value=chart_type)
     x_label        = st.text_input("X-Axis Label", value=col_x)
     y_label        = st.text_input("Y-Axis Label", value=col_y if col_y != "None" else "")
@@ -523,8 +864,13 @@ with tabs[6]:
         dup_keep = st.selectbox("Which duplicate to keep?",
             ["first", "last", "none (drop all)"], key="dup_keep")
     with col_b:
-        st.metric("Current Duplicate Rows", dup_count,
-                  delta="✅ No duplicates" if dup_count == 0 else f"⚠️ {dup_count} found")
+        badge_cls = "badge-danger" if dup_count > 0 else "badge-ok"
+        st.markdown(f"""
+        <div style="margin-top:10px;">
+            <div style="font-size:0.75rem;color:#64748b;margin-bottom:6px;">Duplicate Rows</div>
+            <span class="badge {badge_cls}">{dup_count} {'found ⚠️' if dup_count else 'none ✅'}</span>
+        </div>
+        """, unsafe_allow_html=True)
 
     if st.button("🗑️ Remove Duplicates", disabled=(dup_count == 0), key="btn_dup"):
         subset_arg = dup_subset if dup_subset else None
@@ -545,13 +891,14 @@ with tabs[6]:
     miss_df = miss_df[miss_df > 0]
 
     if miss_df.empty:
-        st.success("✅ No missing values in the dataset!")
+        st.markdown('<span class="badge badge-ok">✅ No missing values in the dataset!</span>',
+                    unsafe_allow_html=True)
     else:
         st.info(f"**{miss_df.sum():,} missing values** across **{len(miss_df)} columns**")
         st.dataframe(pd.DataFrame({
-            "Column":       miss_df.index,
+            "Column":        miss_df.index,
             "Missing Count": miss_df.values,
-            "Missing %":    (miss_df / len(df_clean_work) * 100).round(2).values,
+            "Missing %":     (miss_df / len(df_clean_work) * 100).round(2).values,
         }), use_container_width=True)
 
         st.markdown("**Select imputation strategy per column:**")
@@ -618,7 +965,22 @@ with tabs[6]:
     st.divider()
 
     # ── C: Outlier Treatment ──────────────────────────────────
-    st.markdown('<div class="section-header">📌 Outlier Treatment</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-header">📌 Outlier Detection & Treatment</div>',
+                unsafe_allow_html=True)
+
+    # ── Method info expanders ──────────────────────────────────
+    with st.expander("📖 Learn about outlier detection methods", expanded=False):
+        tabs_out = st.tabs(list(OUTLIER_DETECTION_INFO.keys()))
+        for tab_o, (method_name, info) in zip(tabs_out, OUTLIER_DETECTION_INFO.items()):
+            with tab_o:
+                render_method_card(method_name, info)
+
+    with st.expander("📖 Learn about outlier treatment actions", expanded=False):
+        tabs_act = st.tabs(list(OUTLIER_ACTION_INFO.keys()))
+        for tab_a, (action_name, info) in zip(tabs_act, OUTLIER_ACTION_INFO.items()):
+            with tab_a:
+                render_method_card(action_name, info)
+
     if not num_c:
         st.info("No numeric columns available for outlier treatment.")
     else:
@@ -629,17 +991,17 @@ with tabs[6]:
         n_z   = int((np.abs(stats.zscore(s_out)) > 3).sum())
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("IQR Outliers",            n_iqr)
-        c2.metric("Z-Score Outliers",         n_z)
-        c3.metric("Lower / Upper Fence",      f"{lo:.2f} / {hi:.2f}")
+        with c1:
+            metric_card(n_iqr, "IQR Outliers",  "#dc2626" if n_iqr > 0 else "#16a34a")
+        with c2:
+            metric_card(n_z,   "Z-Score Outliers", "#dc2626" if n_z > 0 else "#16a34a")
+        with c3:
+            metric_card(f"{lo:.2f} / {hi:.2f}", "Lower / Upper Fence", "#6366f1")
 
         out_method = st.selectbox("Detection Method",
-            ["IQR (1.5×IQR)", "Z-Score (|z| > 3)"], key="out_method")
-        out_action = st.selectbox("Treatment Action", [
-            "Cap / Winsorise (clip to fences)",
-            "Fill with Mean", "Fill with Median", "Fill with Mode",
-            "Remove rows with outliers",
-        ], key="out_action")
+            list(OUTLIER_DETECTION_INFO.keys()), key="out_method")
+        out_action = st.selectbox("Treatment Action",
+            list(OUTLIER_ACTION_INFO.keys()), key="out_action")
 
         _ACTION_MAP = {
             "Cap / Winsorise (clip to fences)": "cap",
@@ -685,21 +1047,51 @@ with tabs[6]:
     st.markdown('<div class="section-header">🤖 Encoding Preview & ML-Ready Export</div>',
                 unsafe_allow_html=True)
 
-    enc_method = st.selectbox("Encoding Method (preview only)",
-        ["Label Encoding", "One-Hot Encoding", "Ordinal Encoding", "Frequency Encoding"])
-    enc_col = st.selectbox("Column to Preview",
-        cat_cols if cat_cols else ["(no categorical columns)"])
+    # ── Encoding method info expanders ────────────────────────
+    with st.expander("📖 Learn about encoding methods — which one to choose?", expanded=False):
+        enc_tabs = st.tabs(list(ENCODING_INFO.keys()))
+        for tab_e, (enc_name, info) in zip(enc_tabs, ENCODING_INFO.items()):
+            with tab_e:
+                render_method_card(enc_name, info)
 
-    if cat_cols and enc_col in cat_cols:
-        preview_enc = encoding_preview(df_work[enc_col], enc_col, enc_method)
-        st.dataframe(preview_enc.head(30), use_container_width=True)
+    if cat_cols:
+        enc_col = st.selectbox("Column to Preview", cat_cols, key="enc_col_select")
+
+        if enc_col in cat_cols:
+            # Smart recommendation
+            enc_rec = get_best_encoding_recommendation(df_work[enc_col])
+            rec_color = "#16a34a" if enc_rec["n_unique"] <= 15 else "#d97706"
+            st.markdown(f"""
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                        padding:14px 16px;margin:10px 0;">
+                <b style="color:#16a34a;">🤖 Recommended: {enc_rec['recommended']}</b><br>
+                <span style="font-size:0.85rem;color:#334155;">{enc_rec['reason']}</span><br>
+                <span style="font-size:0.78rem;color:#64748b;">
+                    Unique values: <b style="color:{rec_color};">{enc_rec['n_unique']}</b>
+                    &nbsp;·&nbsp; {enc_rec['pct_unique']}% of rows are unique
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
+            enc_method = st.selectbox(
+                "Encoding Method (preview only)",
+                ["Label Encoding", "One-Hot Encoding", "Ordinal Encoding", "Frequency Encoding"],
+                index=["Label Encoding","One-Hot Encoding","Ordinal Encoding","Frequency Encoding"].index(
+                    enc_rec["recommended"]) if enc_rec["recommended"] in
+                    ["Label Encoding","One-Hot Encoding","Ordinal Encoding","Frequency Encoding"] else 0,
+                key="enc_method_select",
+            )
+            preview_enc = encoding_preview(df_work[enc_col], enc_col, enc_method)
+            st.dataframe(preview_enc.head(30), use_container_width=True)
+    else:
+        st.info("No categorical columns found for encoding preview.")
 
     if st.button("💾 Save ML-Ready as .pkl"):
-        miss_pct = df_work.isna().mean() * 100
+        miss_pct_ml = df_work.isna().mean() * 100
         payload = {
             "dataframe": df_work, "num_cols": num_cols,
             "cat_cols":  cat_cols, "date_cols": date_cols, "shape": df_work.shape,
-            "missing_pct": miss_pct.to_dict(),
+            "missing_pct": miss_pct_ml.to_dict(),
         }
         pkl_buf = df_to_pickle_bytes(payload)
         st.download_button("⬇️ Download ml_ready.pkl", pkl_buf,
@@ -736,7 +1128,7 @@ with tabs[7]:
 
 
 # ══════════════════════════════════════════════
-#  TAB 9 — RECOMMENDATIONS
+#  TAB 9 — RECOMMENDATIONS  (with quality gauge)
 # ══════════════════════════════════════════════
 with tabs[8]:
     st.markdown("### 💡 Automated Data Recommendations")
@@ -745,175 +1137,215 @@ with tabs[8]:
     rec = build_recommendations(df_work, num_cols, cat_cols)
     all_stats  = rec["_all_stats"]
     miss_pct   = rec["_miss_pct"]
+    sc         = rec["scorecard"]
 
-    def render_card(level, title, body):
-        cls_map  = {"critical":"rec-card-danger","warning":"rec-card-warn","ok":"rec-card-ok","info":"rec-card"}
-        icon_map = {"critical":"🔴","warning":"🟡","ok":"🟢","info":"🔵"}
-        st.markdown(
-            f'<div class="{cls_map.get(level,"rec-card")}">'
-            f'<b>{icon_map.get(level,"ℹ️")} {title}</b><br>{body}</div>',
-            unsafe_allow_html=True,
-        )
+    # ── Quality Gauge + Scorecard ─────────────────────────────
+    st.markdown('<div class="section-header">📊 Data Quality Scorecard</div>', unsafe_allow_html=True)
 
-    # 1. Duplicates
+    g_col, b_col = st.columns([1, 1])
+
+    with g_col:
+        st.plotly_chart(quality_gauge(sc["score"]), use_container_width=True)
+
+    with b_col:
+        st.markdown("&nbsp;")
+        qc_top = st.columns(4)
+        for qw, label, val, col_hex in zip(
+            qc_top,
+            ["Score", "Grade", "Critical", "Warnings"],
+            [f"{sc['score']}/100", sc["grade"], sc["critical"], sc["warning"]],
+            ["#6366f1", "#16a34a" if sc["grade"] in ("A","B") else "#d97706",
+             "#dc2626" if sc["critical"] else "#16a34a",
+             "#d97706" if sc["warning"] else "#16a34a"],
+        ):
+            with qw:
+                metric_card(val, label, col_hex)
+
+        st.markdown("&nbsp;")
+
+        # Compute per-factor scores for the breakdown bars
+        miss_pct_v  = df_work.isnull().sum().sum() / df_work.size * 100
+        dup_pct_v   = df_work.duplicated().sum() / len(df_work) * 100
+        out_info_v  = rec.get("outliers", [])
+        avg_out_pct = np.mean([o["pct"] for o in out_info_v]) if out_info_v else 0
+        inv_cnt     = sum(r["n_iqr"] for r in out_info_v) if out_info_v else 0
+        inv_pct_v   = inv_cnt / len(df_work) * 100 if len(df_work) else 0
+
+        factor_scores = {
+            "Missing Values (30 pts)":  max(0, 30 - miss_pct_v * 0.6),
+            "Duplicates (20 pts)":      max(0, 20 - dup_pct_v  * 0.4),
+            "Outliers (20 pts)":        max(0, 20 - avg_out_pct * 0.4),
+            "Invalid / Domain (15 pts)": max(0, 15 - inv_pct_v * 0.3),
+            "Consistency (15 pts)":     15.0,
+        }
+        factor_max = {
+            "Missing Values (30 pts)": 30,
+            "Duplicates (20 pts)":     20,
+            "Outliers (20 pts)":       20,
+            "Invalid / Domain (15 pts)": 15,
+            "Consistency (15 pts)":    15,
+        }
+        quality_breakdown_bars(factor_scores, factor_max)
+
+    # ── Overall verdict ───────────────────────────────────────
+    total_issues = sc["critical"] + sc["warning"]
+    if sc["score"] >= 90:
+        st.success("🎉 Excellent dataset quality — ready for analysis or modelling!")
+    elif sc["score"] >= 75:
+        st.info(f"📈 Good quality. Address {total_issues} issue(s) before modelling.")
+    elif sc["score"] >= 60:
+        st.warning(f"⚠️ Moderate quality. {sc['critical']} critical issues need attention.")
+    else:
+        st.error(f"🚨 Poor data quality. {sc['critical']} critical issues must be fixed before modelling.")
+
+    st.markdown("---")
+
+    # 1. Duplicates ───────────────────────────────────────────
     st.markdown('<div class="section-header">1️⃣ Duplicate Rows</div>', unsafe_allow_html=True)
     d = rec["duplicates"]
     if d["count"] == 0:
-        render_card("ok", "No duplicate rows", "Dataset is free of duplicate rows. ✅")
+        render_rec_card("ok", "No duplicate rows", "Dataset is free of duplicate rows. ✅")
     else:
-        render_card(
+        render_rec_card(
             "critical" if d["pct"] > 5 else "warning",
             f"{d['count']:,} duplicate rows detected ({d['pct']}%)",
-            f"""Duplicates can skew statistics and inflate model performance.<br>
-<b>Fix:</b> Go to 🧹 Data Cleaning → <i>Duplicate Removal</i>, or run:<br>
-<code>df.drop_duplicates(inplace=True)</code>""")
+            f"Duplicates skew statistics and inflate model performance.<br>"
+            f"<b>Fix:</b> Go to 🧹 Data Cleaning → <i>Duplicate Removal</i>, or run:<br>"
+            f"<code>df.drop_duplicates(inplace=True)</code>")
 
-    # 2. Missing Values
+    # 2. Missing Values ────────────────────────────────────────
     st.markdown('<div class="section-header">2️⃣ Missing Values</div>', unsafe_allow_html=True)
     if not rec["missing"]:
-        render_card("ok", "No missing values", "All columns are complete. ✅")
+        render_rec_card("ok", "No missing values", "All columns are complete. ✅")
     for m in rec["missing"]:
-        col = m["col"]
-        pct = m["pct"]
-        if pct > 30:
-            render_card("critical", f"'{col}' has {pct:.1f}% missing — consider dropping",
-                f"""More than 30% missing — this column may not be reliable.<br>
-<b>Options:</b><br>
-• Drop column: <code>df.drop('{col}', axis=1, inplace=True)</code><br>
-• Drop rows: <code>df.dropna(subset=['{col}'], inplace=True)</code><br>
-• Impute: <code>df['{col}'].fillna(df['{col}'].median(), inplace=True)</code>""")
+        col   = m["col"]
+        pct_m = m["pct"]
+        if pct_m > 30:
+            render_rec_card("critical", f"'{col}' has {pct_m:.1f}% missing — consider dropping",
+                f"More than 30% missing — this column may not be reliable.<br>"
+                f"<b>Options:</b><br>"
+                f"• Drop column: <code>df.drop('{col}', axis=1, inplace=True)</code><br>"
+                f"• Impute: <code>df['{col}'].fillna(df['{col}'].median(), inplace=True)</code>")
         elif m["is_numeric"]:
-            skew_v = m["skewness"]
+            skew_v   = m["skewness"]
             rec_fill = "Median" if skew_v and abs(skew_v) > 1 else "Mean"
             code_val = f"df['{col}'].median()" if rec_fill == "Median" else f"df['{col}'].mean()"
-            render_card("warning", f"'{col}' has {pct:.1f}% missing",
-                f"""Skewness = {skew_v} → recommend <b>{rec_fill}</b> imputation.<br>
-<code>df['{col}'].fillna({code_val}, inplace=True)</code>""")
+            render_rec_card("warning", f"'{col}' has {pct_m:.1f}% missing",
+                f"Skewness = {skew_v} → recommend <b>{rec_fill}</b> imputation.<br>"
+                f"<code>df['{col}'].fillna({code_val}, inplace=True)</code>")
         else:
-            render_card("warning", f"'{col}' has {pct:.1f}% missing (categorical)",
-                f"""<b>Options:</b><br>
-• Mode: <code>df['{col}'].fillna(df['{col}'].mode()[0], inplace=True)</code><br>
-• Unknown: <code>df['{col}'].fillna('Unknown', inplace=True)</code>""")
+            render_rec_card("warning", f"'{col}' has {pct_m:.1f}% missing (categorical)",
+                f"<b>Options:</b><br>"
+                f"• Mode: <code>df['{col}'].fillna(df['{col}'].mode()[0], inplace=True)</code><br>"
+                f"• Unknown: <code>df['{col}'].fillna('Unknown', inplace=True)</code>")
 
-    # 3. Skewness
+    # 3. Skewness ─────────────────────────────────────────────
     st.markdown('<div class="section-header">3️⃣ Skewness & Normality</div>', unsafe_allow_html=True)
     if not rec["skewness"]:
-        render_card("ok", "All numeric columns have acceptable skewness",
-                    "No highly skewed columns detected. ✅")
-    for s in rec["skewness"]:
-        col    = s["col"]
-        skew_v = s["skewness"]
+        render_rec_card("ok", "All numeric columns have acceptable skewness",
+                        "No highly skewed columns detected. ✅")
+    for s_r in rec["skewness"]:
+        col    = s_r["col"]
+        skew_v = s_r["skewness"]
         direction = "right (+)" if skew_v > 0 else "left (–)"
-        render_card("warning", f"'{col}' is highly skewed (skewness = {skew_v})",
-            f"""Skewed {direction}. Affects regression and mean-based statistics.<br>
-<b>Fix:</b><br>
-1. Try log: <code>df['{col}_log'] = np.log1p(df['{col}'])</code><br>
-2. Or Yeo-Johnson: <code>from sklearn.preprocessing import PowerTransformer<br>
-   pt = PowerTransformer(method='yeo-johnson')<br>
-   df['{col}_yj'] = pt.fit_transform(df[['{col}']])</code><br>
-3. Re-check: <code>df['{col}_log'].skew()</code> — aim for |skew| &lt; 0.5""")
+        render_rec_card("warning", f"'{col}' is highly skewed (skewness = {skew_v})",
+            f"Skewed {direction}. Affects regression and mean-based statistics.<br>"
+            f"<b>Fix:</b><br>"
+            f"1. Log: <code>df['{col}_log'] = np.log1p(df['{col}'])</code><br>"
+            f"2. Yeo-Johnson: <code>from sklearn.preprocessing import PowerTransformer<br>"
+            f"   pt = PowerTransformer(method='yeo-johnson')<br>"
+            f"   df['{col}_yj'] = pt.fit_transform(df[['{col}']])</code><br>"
+            f"3. Re-check: <code>df['{col}_log'].skew()</code> — aim for |skew| &lt; 0.5")
 
-    # 4. Outliers
+    # 4. Outliers ─────────────────────────────────────────────
     st.markdown('<div class="section-header">4️⃣ Outlier Detection</div>', unsafe_allow_html=True)
     if not rec["outliers"]:
-        render_card("ok", "No significant outliers detected (IQR method)",
-                    "All numeric columns look clean. ✅")
+        render_rec_card("ok", "No significant outliers detected (IQR method)",
+                        "All numeric columns look clean. ✅")
     for o in rec["outliers"]:
         col  = o["col"]
         lo_f = o["lo"]; hi_f = o["hi"]
-        render_card(
+        render_rec_card(
             "critical" if o["pct"] >= 5 else "warning",
             f"'{col}' has {o['n_iqr']} IQR outlier(s) ({o['pct']}%)",
-            f"""Fences: [{lo_f}, {hi_f}]  |  Z-score outliers: {o['n_z']}<br>
-<b>Options:</b><br>
-• Cap: <code>df['{col}'] = df['{col}'].clip(lower={lo_f}, upper={hi_f})</code><br>
-• Fill median: <code>mask=(df['{col}']&lt;{lo_f})|(df['{col}']&gt;{hi_f})<br>
-  df.loc[mask,'{col}']=df['{col}'].median()</code><br>
-• Remove: <code>df=df[~mask].reset_index(drop=True)</code>""")
+            f"Fences: [{lo_f:.3f}, {hi_f:.3f}]  |  Z-score outliers: {o['n_z']}<br>"
+            f"<b>Options:</b><br>"
+            f"• Cap: <code>df['{col}'] = df['{col}'].clip(lower={lo_f:.3f}, upper={hi_f:.3f})</code><br>"
+            f"• Fill median: <code>mask=(df['{col}']&lt;{lo_f:.3f})|(df['{col}']&gt;{hi_f:.3f})<br>"
+            f"  df.loc[mask,'{col}']=df['{col}'].median()</code><br>"
+            f"• Remove: <code>df=df[~mask].reset_index(drop=True)</code>")
 
-    # 5. Cardinality
+    # 5. Cardinality ──────────────────────────────────────────
     st.markdown('<div class="section-header">5️⃣ Categorical Cardinality</div>', unsafe_allow_html=True)
-    card_high = [r for r in rec["cardinality"] if r["n_unique"] > 50]
+    card_high  = [r for r in rec["cardinality"] if r["n_unique"] > 50]
     card_const = [r for r in rec["cardinality"] if r["n_unique"] == 1]
     if not card_high and not card_const:
-        render_card("ok", "Categorical cardinality is acceptable",
-                    "All categorical columns have manageable unique counts. ✅")
+        render_rec_card("ok", "Categorical cardinality is acceptable",
+                        "All categorical columns have manageable unique counts. ✅")
     for r in card_const:
         col = r["col"]
-        render_card("critical", f"'{col}' has only 1 unique value — constant column",
+        render_rec_card("critical", f"'{col}' has only 1 unique value — constant column",
             f"Drop it: <code>df.drop('{col}', axis=1, inplace=True)</code>")
     for r in card_high:
         col = r["col"]; n = r["n_unique"]
-        render_card("warning", f"'{col}' has high cardinality ({n} unique values)",
-            f"""<b>Better approaches:</b><br>
-• Frequency encode: <code>freq=df['{col}'].value_counts(normalize=True)<br>
-  df['{col}_freq']=df['{col}'].map(freq)</code><br>
-• Group rare: <code>top=df['{col}'].value_counts().head(20).index<br>
-  df['{col}']=df['{col}'].where(df['{col}'].isin(top),other='Other')</code>""")
+        render_rec_card("warning", f"'{col}' has high cardinality ({n} unique values)",
+            f"<b>Better approaches:</b><br>"
+            f"• Frequency encode: <code>freq=df['{col}'].value_counts(normalize=True)<br>"
+            f"  df['{col}_freq']=df['{col}'].map(freq)</code><br>"
+            f"• Group rare: <code>top=df['{col}'].value_counts().head(20).index<br>"
+            f"  df['{col}']=df['{col}'].where(df['{col}'].isin(top),other='Other')</code>")
 
-    # 6. Low Variance
+    # 6. Low Variance ─────────────────────────────────────────
     st.markdown('<div class="section-header">6️⃣ Low / Zero Variance Columns</div>', unsafe_allow_html=True)
     if not rec["low_variance"]:
-        render_card("ok", "All numeric columns have adequate variance", "✅")
+        render_rec_card("ok", "All numeric columns have adequate variance", "✅")
     for r in rec["low_variance"]:
         col = r["col"]
         if r["std"] < 1e-6:
-            render_card("critical", f"'{col}' has zero variance (constant)",
+            render_rec_card("critical", f"'{col}' has zero variance (constant)",
                 f"Drop it: <code>df.drop('{col}', axis=1, inplace=True)</code>")
         else:
-            render_card("info", f"'{col}' has very low variance (CV = {r['cv_pct']}%)",
+            render_rec_card("info", f"'{col}' has very low variance (CV = {r['cv_pct']}%)",
                 "Consider whether this column is meaningful before including in models.")
 
-    # 7. Class Imbalance
+    # 7. Class Imbalance ──────────────────────────────────────
     st.markdown('<div class="section-header">7️⃣ Class Distribution (Categorical)</div>', unsafe_allow_html=True)
     if not rec["imbalance"]:
-        render_card("ok", "No severe class imbalance detected",
-                    "Categorical columns look balanced. ✅")
+        render_rec_card("ok", "No severe class imbalance detected",
+                        "Categorical columns look balanced. ✅")
     for r in rec["imbalance"]:
-        col = r["col"]; dom_val = r["dominant_val"]; pct = r["dominant_pct"]
-        render_card(
-            "critical" if pct >= 90 else "warning",
-            f"'{col}' dominated by '{dom_val}' ({pct:.1f}%)",
-            f"""If this is a target/label column, the dataset is class-imbalanced.<br>
-<b>Fixes:</b><br>
-• Oversample: <code>from imblearn.over_sampling import SMOTE</code><br>
-• Use class_weight='balanced' in sklearn models<br>
-• Evaluate with F1, AUC-ROC instead of accuracy""")
+        col = r["col"]; dom_val = r["dominant_val"]; pct_i = r["dominant_pct"]
+        render_rec_card(
+            "critical" if pct_i >= 90 else "warning",
+            f"'{col}' dominated by '{dom_val}' ({pct_i:.1f}%)",
+            f"If this is a target/label column, the dataset is class-imbalanced.<br>"
+            f"<b>Fixes:</b><br>"
+            f"• Oversample: <code>from imblearn.over_sampling import SMOTE</code><br>"
+            f"• Use <code>class_weight='balanced'</code> in sklearn models<br>"
+            f"• Evaluate with F1, AUC-ROC instead of accuracy")
 
-    # 8. Multicollinearity
+    # 8. Multicollinearity ────────────────────────────────────
     if len(num_cols) >= 2:
         st.markdown('<div class="section-header">8️⃣ Multicollinearity (High Correlation)</div>',
                     unsafe_allow_html=True)
         if not rec["high_corr"]:
-            render_card("ok", "No highly correlated pairs (r > 0.85)",
-                        "No multicollinearity risk detected. ✅")
+            render_rec_card("ok", "No highly correlated pairs (r > 0.85)",
+                            "No multicollinearity risk detected. ✅")
         for r in rec["high_corr"]:
             c1n = r["col_a"]; c2n = r["col_b"]; r_val = r["r"]
-            render_card("warning", f"High correlation: '{c1n}' ↔ '{c2n}' (r = {r_val})",
-                f"""Multicollinearity can destabilise linear models.<br>
-<b>Options:</b><br>
-• Drop one: <code>df.drop('{c2n}', axis=1, inplace=True)</code><br>
-• Use PCA to combine correlated features<br>
-• Use regularisation (Ridge/Lasso)""")
+            render_rec_card("warning", f"High correlation: '{c1n}' ↔ '{c2n}' (r = {r_val})",
+                f"Multicollinearity can destabilise linear models.<br>"
+                f"<b>Options:</b><br>"
+                f"• Drop one: <code>df.drop('{c2n}', axis=1, inplace=True)</code><br>"
+                f"• Use PCA to combine correlated features<br>"
+                f"• Use regularisation (Ridge/Lasso)")
 
-    # 9. EDA Checklist
+    # 9. EDA Checklist ────────────────────────────────────────
     st.markdown('<div class="section-header">✅ Complete EDA Checklist</div>', unsafe_allow_html=True)
     for item, done in rec["checklist"]:
-        st.markdown(f"{'✅' if done else '⬜'} {item}")
-
-    # 10. Scorecard
-    st.markdown('<div class="section-header">📊 Data Quality Scorecard</div>', unsafe_allow_html=True)
-    sc = rec["scorecard"]
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Quality Score",    f"{sc['score']}/100")
-    col2.metric("Grade",            sc["grade"])
-    col3.metric("Critical Issues",  sc["critical"])
-    col4.metric("Warnings",         sc["warning"])
-
-    total_issues = sc["critical"] + sc["warning"]
-    if sc["score"] == 100:
-        st.success("🎉 Your dataset is in excellent shape and ready for analysis or modelling!")
-    elif sc["score"] >= 75:
-        st.info(f"📈 Good dataset quality. Address {total_issues} issue(s) before modelling.")
-    else:
-        st.warning("⚠️ Several issues need attention before this data is modelling-ready.")
+        badge_cls = "badge-ok" if done else "badge-warn"
+        icon      = "✅" if done else "⬜"
+        st.markdown(
+            f'{icon} {item} &nbsp; <span class="badge {badge_cls}">{"Done" if done else "Pending"}</span>',
+            unsafe_allow_html=True,
+        )
