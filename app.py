@@ -3,7 +3,6 @@
 #  All data logic lives in processing.py
 #  Run: streamlit run app.py
 # ============================================================
-
 import io
 import warnings
 
@@ -34,16 +33,6 @@ from processing import (
 )
 
 warnings.filterwarnings("ignore")
-
-# ─────────────────────────────────────────────
-#  SESSION STATE  (must be initialised before sidebar runs)
-# ─────────────────────────────────────────────
-if "df_clean" not in st.session_state:
-    st.session_state.df_clean = None
-if "clean_log" not in st.session_state:
-    st.session_state.clean_log = []
-if "df_clean_history" not in st.session_state:
-    st.session_state.df_clean_history = []
 
 
 # ─────────────────────────────────────────────
@@ -240,13 +229,26 @@ code {
 
 div.stAlert { border-radius: 10px !important; }
 
-/* Prevent white flash on st.rerun() */
-html, body, [data-testid="stAppViewContainer"], .stApp {
-    background-color: var(--bg) !important;
-    transition: none !important;
+/* ── Tab Navigation Buttons ── */
+.nav-btn-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 32px 0 8px 0;
+    padding: 14px 18px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    gap: 12px;
 }
-[data-testid="stAppViewContainer"] > div {
-    background-color: var(--bg) !important;
+.nav-tab-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 600;
+    text-align: center;
+    flex: 1;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -589,7 +591,58 @@ CORRELATION_METHOD_INFO = {
 }
 
 
+# ─────────────────────────────────────────────
+#  SESSION STATE
+# ─────────────────────────────────────────────
+if "df_clean" not in st.session_state:
+    st.session_state.df_clean = None
+if "clean_log" not in st.session_state:
+    st.session_state.clean_log = []
+if "df_clean_history" not in st.session_state:
+    st.session_state.df_clean_history = []  # list of (df_snapshot, log_snapshot)
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = 0
 
+# ── Tab metadata ──────────────────────────────────────────────────────────────
+TAB_NAMES = [
+    "🗂 Overview",
+    "🔢 Numerical",
+    "🏷️ Categorical",
+    "📐 Correlation",
+    "📊 Charts",
+    "🔄 Transform",
+    "🧹 Data Cleaning",
+    "➕ Add Data",
+    "💾 Export",
+    "💡 Recommendations",
+]
+
+def render_tab_nav(current_idx: int):
+    """Render Prev / Next navigation buttons at the bottom of a tab."""
+    prev_idx = current_idx - 1
+    next_idx = current_idx + 1
+    has_prev = prev_idx >= 0
+    has_next = next_idx < len(TAB_NAMES)
+
+    left_col, mid_col, right_col = st.columns([1, 2, 1])
+    with left_col:
+        if has_prev:
+            if st.button(f"← {TAB_NAMES[prev_idx]}", key=f"nav_prev_{current_idx}",
+                         use_container_width=True):
+                st.session_state.active_tab = prev_idx
+                st.rerun()
+    with mid_col:
+        st.markdown(
+            f'<div style="text-align:center;font-size:0.78rem;color:var(--muted,#64748b);">'
+            f'Tab {current_idx + 1} of {len(TAB_NAMES)}</div>',
+            unsafe_allow_html=True,
+        )
+    with right_col:
+        if has_next:
+            if st.button(f"{TAB_NAMES[next_idx]} →", key=f"nav_next_{current_idx}",
+                         use_container_width=True):
+                st.session_state.active_tab = next_idx
+                st.rerun()
 
 
 def _save_snapshot():
@@ -922,17 +975,7 @@ if df_raw is None:
 
 num_cols, cat_cols, date_cols, bool_cols = detect_col_types(df_work)
 
-tabs = st.tabs([
-    "🗂 Overview",
-    "🔢 Numerical",
-    "🏷️ Categorical",
-    "📐 Correlation",
-    "📊 Charts",
-    "🔄 Transform",
-    "🧹 Data Cleaning",
-    "💾 Export",
-    "💡 Recommendations",
-])
+tabs = st.tabs(TAB_NAMES)
 
 
 # ══════════════════════════════════════════════
@@ -951,10 +994,10 @@ with tabs[0]:
             metric_card(val, label)
 
     st.markdown("&nbsp;")
-    st.dataframe(df_work.head(50), width='stretch')
+    st.dataframe(df_work.head(50), use_container_width=True)
 
     st.markdown('<div class="section-header">Data Types & Quality</div>', unsafe_allow_html=True)
-    st.dataframe(dtype_quality_table(df_work), width='stretch')
+    st.dataframe(dtype_quality_table(df_work), use_container_width=True)
 
     st.markdown('<div class="section-header">Missing Values</div>', unsafe_allow_html=True)
     miss = missing_summary(df_work)
@@ -967,7 +1010,7 @@ with tabs[0]:
                      template=template, height=int(chart_h // 1.5))
         fig.update_layout(font_size=font_sz, showlegend=False,
                           paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc")
-        st.plotly_chart(fig, width='stretch')
+        st.plotly_chart(fig, use_container_width=True)
 
     st.markdown('<div class="section-header">Duplicate Analysis</div>', unsafe_allow_html=True)
     dupes = duplicate_rows(df_work)
@@ -981,7 +1024,9 @@ with tabs[0]:
             "#dc2626" if dupes > 0 else "#16a34a",
         )
     if dupes:
-        st.dataframe(df_work[df_work.duplicated()], width='stretch')
+        st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
+
+    render_tab_nav(0)
 
 
 # ══════════════════════════════════════════════
@@ -1003,32 +1048,34 @@ with tabs[1]:
             if "Descriptive Statistics" in analyses:
                 st.markdown('<div class="section-header">Descriptive Statistics</div>', unsafe_allow_html=True)
                 st.dataframe(descriptive_stats(df_work, sel_num).style.format("{:.4f}"),
-                             width='stretch')
+                             use_container_width=True)
 
             if "Percentile Table" in analyses:
                 st.markdown('<div class="section-header">Percentile Table</div>', unsafe_allow_html=True)
                 st.dataframe(percentile_table(df_work, sel_num).style.format("{:.4f}"),
-                             width='stretch')
+                             use_container_width=True)
 
             if "Skewness & Kurtosis" in analyses:
                 st.markdown('<div class="section-header">Skewness & Kurtosis</div>', unsafe_allow_html=True)
-                st.dataframe(skewness_kurtosis(df_work, sel_num), width='stretch')
+                st.dataframe(skewness_kurtosis(df_work, sel_num), use_container_width=True)
 
             if "Normality Test (Shapiro-Wilk)" in analyses:
                 st.markdown('<div class="section-header">Normality Test</div>', unsafe_allow_html=True)
-                st.dataframe(normality_test(df_work, sel_num), width='stretch')
+                st.dataframe(normality_test(df_work, sel_num), use_container_width=True)
 
             if "Outlier Detection (IQR)" in analyses:
                 st.markdown('<div class="section-header">Outlier Detection — IQR</div>', unsafe_allow_html=True)
-                st.dataframe(outlier_iqr_table(df_work, sel_num), width='stretch')
+                st.dataframe(outlier_iqr_table(df_work, sel_num), use_container_width=True)
 
             if "Outlier Detection (Z-Score)" in analyses:
                 st.markdown('<div class="section-header">Outlier Detection — Z-Score</div>', unsafe_allow_html=True)
-                st.dataframe(outlier_zscore_table(df_work, sel_num), width='stretch')
+                st.dataframe(outlier_zscore_table(df_work, sel_num), use_container_width=True)
 
             if "Variance Analysis" in analyses:
                 st.markdown('<div class="section-header">Variance Analysis</div>', unsafe_allow_html=True)
-                st.dataframe(variance_table(df_work, sel_num), width='stretch')
+                st.dataframe(variance_table(df_work, sel_num), use_container_width=True)
+
+        render_tab_nav(1)
 
 
 # ══════════════════════════════════════════════
@@ -1051,7 +1098,7 @@ with tabs[2]:
             vc = s.value_counts()
 
             if "Frequency Table" in cat_analyses:
-                st.dataframe(frequency_table(s), width='stretch')
+                st.dataframe(frequency_table(s), use_container_width=True)
 
             if "Cardinality" in cat_analyses:
                 n_u = s.nunique()
@@ -1079,6 +1126,8 @@ with tabs[2]:
                 ent, max_ent = shannon_entropy(s)
                 st.metric(f"Shannon Entropy ('{col}')", f"{ent:.4f} bits",
                           delta=f"Max possible: {max_ent:.2f} bits")
+
+        render_tab_nav(2)
 
 
 # ══════════════════════════════════════════════
@@ -1130,17 +1179,17 @@ with tabs[3]:
 
             st.markdown('<div class="section-header">Correlation Matrix</div>', unsafe_allow_html=True)
             st.dataframe(corr_df.style.background_gradient(cmap=palette, axis=None).format("{:.3f}"),
-                         width='stretch')
+                         use_container_width=True)
 
             fig_c = px.imshow(corr_df, text_auto=".2f", color_continuous_scale=palette,
                               template=template, height=chart_h, width=chart_w,
                               title=f"{corr_method.capitalize()} Correlation Heatmap")
             fig_c.update_layout(font_size=font_sz)
-            st.plotly_chart(fig_c, width='stretch')
+            st.plotly_chart(fig_c, use_container_width=True)
 
             st.markdown('<div class="section-header">Top Correlations (Ranked)</div>', unsafe_allow_html=True)
             corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
-            st.dataframe(corr_pairs_df, width='stretch')
+            st.dataframe(corr_pairs_df, use_container_width=True)
 
             # ── Interpretation guide ──────────────────────────
             st.markdown("""
@@ -1157,6 +1206,8 @@ with tabs[3]:
                 always check for confounders and use domain knowledge.
             </div>
             """, unsafe_allow_html=True)
+
+        render_tab_nav(3)
 
 
 # ══════════════════════════════════════════════
@@ -1264,7 +1315,7 @@ with tabs[4]:
                 xaxis_title=x_label, yaxis_title=y_label,
                 xaxis=dict(showgrid=show_grid), yaxis=dict(showgrid=show_grid),
             )
-            st.plotly_chart(fig_chart, width='stretch')
+            st.plotly_chart(fig_chart, use_container_width=True)
 
             fmt = st.selectbox("Export Chart As", ["png", "svg", "html"])
             if st.button("⬇️ Download Chart"):
@@ -1282,6 +1333,8 @@ with tabs[4]:
 
     except Exception as e:
         st.error(f"Chart error: {e}")
+
+    render_tab_nav(4)
 
 
 # ══════════════════════════════════════════════
@@ -1359,7 +1412,7 @@ with tabs[5]:
             skew_df.style.map(_colour_cls, subset=["Classification"]).format(
                 {"Skewness": "{:.4f}", "Mean": "{:.4f}", "Median": "{:.4f}", "Std": "{:.4f}"}
             ),
-            width='stretch', height=min(400, 60 + 35 * len(skew_rows)),
+            use_container_width=True, height=min(400, 60 + 35 * len(skew_rows)),
         )
 
         # ── B: Per-column distribution charts with skew annotation ──
@@ -1403,7 +1456,7 @@ with tabs[5]:
                             margin=dict(l=10, r=10, t=50, b=30),
                             paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc",
                         )
-                        st.plotly_chart(fig_h, width='stretch')
+                        st.plotly_chart(fig_h, use_container_width=True)
                     except Exception as e:
                         st.warning(f"Chart error for '{col}': {e}")
 
@@ -1472,7 +1525,7 @@ with tabs[5]:
                 st.dataframe(
                     pd.DataFrame({**before_stats, **preview}).T
                     .rename_axis("Transform").reset_index(),
-                    width='stretch',
+                    use_container_width=True,
                 )
 
                 # Side-by-side before/after charts
@@ -1487,7 +1540,7 @@ with tabs[5]:
                                         template=template, height=240, showlegend=False,
                                         margin=dict(l=5,r=5,t=45,b=20),
                                         paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc")
-                    st.plotly_chart(fig_b, width='stretch')
+                    st.plotly_chart(fig_b, use_container_width=True)
 
                 for i, t_name in enumerate(transforms_sel, 1):
                     if i < len(chart_cols):
@@ -1513,7 +1566,7 @@ with tabs[5]:
                                     margin=dict(l=5,r=5,t=45,b=20),
                                     paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc",
                                 )
-                                st.plotly_chart(fig_a, width='stretch')
+                                st.plotly_chart(fig_a, use_container_width=True)
 
                 st.success("✅ Transformations previewed above.")
 
@@ -1546,9 +1599,11 @@ with tabs[5]:
                         f"✅ Transform applied: '{t_col_sel}' → '{sc}'"
                     )
                 if saved_cols:
-                    st.toast(f"Saved {len(saved_cols)} new column(s): {', '.join(saved_cols)}. "
-                             f"Dataset now has {df_save.shape[1]} columns.", icon="✅")
+                    st.success(f"Saved {len(saved_cols)} new column(s): {', '.join(saved_cols)}. "
+                               f"Dataset now has {df_save.shape[1]} columns.")
                 st.rerun()
+
+        render_tab_nav(5)
 
 
 # ══════════════════════════════════════════════
@@ -1590,7 +1645,7 @@ with tabs[6]:
         st.session_state.df_clean = df_new
         st.session_state.clean_log.append(
             f"✅ Removed {removed} duplicate rows (keep='{dup_keep}')")
-        st.toast(f"Removed {removed} rows. Dataset now has {len(df_new):,} rows.", icon="✅")
+        st.success(f"Removed {removed} rows. Dataset now has {len(df_new):,} rows.")
         st.rerun()
 
     st.divider()
@@ -1617,7 +1672,7 @@ with tabs[6]:
             "Column":        miss_df.index,
             "Missing Count": miss_df.values,
             "Missing %":     (miss_df / len(df_clean_work) * 100).round(2).values,
-        }), width='stretch')
+        }), use_container_width=True)
 
         st.markdown("**Select imputation strategy per column:**")
         impute_actions = {}
@@ -1678,7 +1733,7 @@ with tabs[6]:
             st.session_state.df_clean = df_imp
             for a in applied:
                 st.session_state.clean_log.append(f"✅ Imputed: {a}")
-            st.toast(f"Applied imputation to {len(applied)} column(s).", icon="✅")
+            st.success(f"Applied imputation to {len(applied)} column(s).")
             st.rerun()
 
     st.divider()
@@ -1742,7 +1797,7 @@ with tabs[6]:
             )
             st.session_state.df_clean = df_new
             st.session_state.clean_log.append(f"✅ {msg}")
-            st.toast(msg, icon="✅")
+            st.success(msg)
             st.rerun()
 
     st.divider()
@@ -1762,14 +1817,14 @@ with tabs[6]:
                 prev_df, prev_log = st.session_state.df_clean_history.pop()
                 st.session_state.df_clean = prev_df
                 st.session_state.clean_log = prev_log
-                st.toast("Last operation undone.", icon="✅")
+                st.success("Last operation undone.")
                 st.rerun()
         with btn_col2:
             if st.button("🔄 Reset to Original Data", key="btn_reset"):
                 st.session_state.df_clean = df_raw.copy()
                 st.session_state.clean_log = []
                 st.session_state.df_clean_history = []
-                st.toast("Dataset reset to original.", icon="✅")
+                st.success("Dataset reset to original.")
                 st.rerun()
 
     st.divider()
@@ -1828,7 +1883,7 @@ with tabs[6]:
             # Live preview
             st.markdown("**Preview (first 30 rows):**")
             preview_enc = encoding_preview(df_work[enc_col], enc_col, enc_method)
-            st.dataframe(preview_enc.head(30), width='stretch')
+            st.dataframe(preview_enc.head(30), use_container_width=True)
 
             # Apply & Save button
             st.markdown("**Apply encoding to the working dataset:**")
@@ -1855,7 +1910,7 @@ with tabs[6]:
                     )
                     st.session_state.df_clean = df_enc
                     st.session_state.clean_log.append(f"✅ {enc_log}")
-                    st.toast(enc_log, icon="✅")
+                    st.success(enc_log)
                     st.rerun()
     else:
         st.info("No categorical columns found for encoding preview.")
@@ -1871,11 +1926,205 @@ with tabs[6]:
         st.download_button("⬇️ Download ml_ready.pkl", pkl_buf,
             file_name="ml_ready.pkl", mime="application/octet-stream")
 
+    render_tab_nav(6)
+
 
 # ══════════════════════════════════════════════
-#  TAB 8 — EXPORT
+#  TAB 7 — ADD DATA
 # ══════════════════════════════════════════════
 with tabs[7]:
+    st.markdown("### ➕ Add Data to Dataset")
+    st.caption("Manually add new rows to your working dataset. Changes are saved to the cleaned dataset and reflected across all tabs.")
+
+    if df_raw is None:
+        st.info("Upload a dataset first to add rows.")
+    else:
+        df_add_work = st.session_state.df_clean[keep].copy()
+        num_c_add, cat_c_add, _, _ = detect_col_types(df_add_work)
+
+        st.markdown('<div class="section-header">📋 Current Dataset</div>', unsafe_allow_html=True)
+        add_m1, add_m2, add_m3 = st.columns(3)
+        with add_m1:
+            metric_card(f"{len(df_add_work):,}", "Total Rows")
+        with add_m2:
+            metric_card(f"{len(df_add_work.columns)}", "Columns")
+        with add_m3:
+            metric_card(f"{df_add_work.isnull().sum().sum():,}", "Missing Values")
+
+        st.markdown("&nbsp;")
+
+        # ── Number of rows to add ─────────────────────────────
+        st.markdown('<div class="section-header">✍️ Enter New Row(s)</div>', unsafe_allow_html=True)
+        n_rows_to_add = st.number_input(
+            "How many rows do you want to add?", min_value=1, max_value=50, value=1, step=1,
+            key="n_rows_add"
+        )
+
+        st.info(f"Fill in values for each column. Leave blank to insert a missing value (NaN).")
+
+        # Build a form for each new row
+        new_rows_data = []
+        for row_i in range(int(n_rows_to_add)):
+            if n_rows_to_add > 1:
+                st.markdown(f"**Row {row_i + 1}**")
+            row_vals = {}
+            # Split columns into groups of 3 for a neat grid
+            col_groups = [df_add_work.columns.tolist()[i:i+3]
+                          for i in range(0, len(df_add_work.columns), 3)]
+            for grp in col_groups:
+                form_cols = st.columns(len(grp))
+                for fc, col in zip(form_cols, grp):
+                    with fc:
+                        col_dtype = str(df_add_work[col].dtype)
+                        is_numeric = col in num_c_add
+                        is_cat     = col in cat_c_add
+                        placeholder = f"{col}"
+
+                        if is_numeric:
+                            # Show numeric input with optional blank
+                            raw_val = st.text_input(
+                                f"{col} *(numeric)*",
+                                value="",
+                                placeholder="e.g. 42.5",
+                                key=f"add_row{row_i}_{col}",
+                            )
+                            if raw_val.strip() == "":
+                                row_vals[col] = np.nan
+                            else:
+                                try:
+                                    row_vals[col] = float(raw_val)
+                                except ValueError:
+                                    st.warning(f"'{col}': '{raw_val}' is not numeric — stored as NaN")
+                                    row_vals[col] = np.nan
+                        elif is_cat:
+                            unique_vals = df_add_work[col].dropna().unique().tolist()
+                            if len(unique_vals) <= 30:
+                                options = ["(blank / NaN)"] + [str(v) for v in sorted(unique_vals)]
+                                chosen = st.selectbox(
+                                    f"{col} *(categorical)*",
+                                    options,
+                                    key=f"add_row{row_i}_{col}",
+                                )
+                                row_vals[col] = np.nan if chosen == "(blank / NaN)" else chosen
+                            else:
+                                raw_val = st.text_input(
+                                    f"{col} *(categorical)*",
+                                    value="",
+                                    placeholder="Type a value",
+                                    key=f"add_row{row_i}_{col}",
+                                )
+                                row_vals[col] = np.nan if raw_val.strip() == "" else raw_val.strip()
+                        else:
+                            raw_val = st.text_input(
+                                f"{col}",
+                                value="",
+                                placeholder="Enter value",
+                                key=f"add_row{row_i}_{col}",
+                            )
+                            row_vals[col] = np.nan if raw_val.strip() == "" else raw_val.strip()
+
+            new_rows_data.append(row_vals)
+            if n_rows_to_add > 1 and row_i < n_rows_to_add - 1:
+                st.markdown("---")
+
+        # ── Preview of new rows ───────────────────────────────
+        st.markdown('<div class="section-header">👁️ Preview New Row(s)</div>', unsafe_allow_html=True)
+        preview_new = pd.DataFrame(new_rows_data, columns=df_add_work.columns)
+        st.dataframe(preview_new, use_container_width=True)
+
+        # ── CSV paste / bulk import ───────────────────────────
+        st.markdown('<div class="section-header">📥 Bulk Import via CSV Paste</div>', unsafe_allow_html=True)
+        st.caption("Paste CSV text below (with header row matching your dataset columns) to add multiple rows at once.")
+
+        cols_hint = ", ".join(df_add_work.columns.tolist())
+        csv_paste = st.text_area(
+            "Paste CSV rows here",
+            height=120,
+            placeholder=f"Header: {cols_hint}\nRow 1: value1, value2, ...\nRow 2: value1, value2, ...",
+            key="csv_paste_input",
+        )
+
+        bulk_rows_preview = None
+        if csv_paste.strip():
+            try:
+                import io as _io
+                bulk_rows_preview = pd.read_csv(_io.StringIO(csv_paste.strip()))
+                st.success(f"✅ Parsed {len(bulk_rows_preview)} row(s) from pasted CSV")
+                st.dataframe(bulk_rows_preview, use_container_width=True)
+            except Exception as e:
+                st.error(f"Could not parse CSV: {e}")
+                bulk_rows_preview = None
+
+        # ── Commit buttons ────────────────────────────────────
+        st.markdown("&nbsp;")
+        btn_col_a, btn_col_b, btn_col_c = st.columns([2, 2, 1])
+
+        with btn_col_a:
+            if st.button("✅ Add Manually Entered Row(s)", key="btn_add_manual_rows",
+                         use_container_width=True):
+                _save_snapshot()
+                df_combined = pd.concat(
+                    [st.session_state.df_clean, preview_new],
+                    ignore_index=True,
+                )
+                # Coerce numeric columns back
+                for col in num_c_add:
+                    if col in df_combined.columns:
+                        df_combined[col] = pd.to_numeric(df_combined[col], errors="coerce")
+                st.session_state.df_clean = df_combined
+                st.session_state.clean_log.append(
+                    f"➕ Added {len(preview_new)} row(s) manually. "
+                    f"Dataset now has {len(df_combined):,} rows."
+                )
+                st.success(
+                    f"✅ {len(preview_new)} row(s) added! Dataset now has {len(df_combined):,} rows."
+                )
+                st.rerun()
+
+        with btn_col_b:
+            if bulk_rows_preview is not None:
+                if st.button("📥 Add Bulk CSV Row(s)", key="btn_add_bulk_rows",
+                             use_container_width=True):
+                    _save_snapshot()
+                    df_combined = pd.concat(
+                        [st.session_state.df_clean, bulk_rows_preview],
+                        ignore_index=True,
+                    )
+                    for col in num_c_add:
+                        if col in df_combined.columns:
+                            df_combined[col] = pd.to_numeric(df_combined[col], errors="coerce")
+                    st.session_state.df_clean = df_combined
+                    st.session_state.clean_log.append(
+                        f"➕ Bulk-imported {len(bulk_rows_preview)} row(s) via CSV paste. "
+                        f"Dataset now has {len(df_combined):,} rows."
+                    )
+                    st.success(
+                        f"✅ {len(bulk_rows_preview)} row(s) added! Dataset now has {len(df_combined):,} rows."
+                    )
+                    st.rerun()
+
+        with btn_col_c:
+            if st.button("↩️ Undo", key="btn_undo_add",
+                         disabled=len(st.session_state.df_clean_history) == 0,
+                         use_container_width=True):
+                prev_df, prev_log = st.session_state.df_clean_history.pop()
+                st.session_state.df_clean = prev_df
+                st.session_state.clean_log = prev_log
+                st.success("Last add operation undone.")
+                st.rerun()
+
+        # ── Updated dataset preview ───────────────────────────
+        st.markdown('<div class="section-header">📊 Updated Dataset (last 20 rows)</div>',
+                    unsafe_allow_html=True)
+        st.dataframe(st.session_state.df_clean[keep].tail(20), use_container_width=True)
+
+        render_tab_nav(7)
+
+
+# ══════════════════════════════════════════════
+#  TAB 8 — EXPORT  (was TAB 8, now shifted)
+# ══════════════════════════════════════════════
+with tabs[8]:
     st.markdown('<div class="section-header">Export Data</div>', unsafe_allow_html=True)
 
     export_choice = st.radio("Export Which Dataset?",
@@ -1900,11 +2149,13 @@ with tabs[7]:
         st.download_button("⬇️ Summary Stats (CSV)", summary.to_csv(),
             file_name="summary_stats.csv", mime="text/csv")
 
+    render_tab_nav(8)
+
 
 # ══════════════════════════════════════════════
 #  TAB 9 — RECOMMENDATIONS  (fully rebuilt)
 # ══════════════════════════════════════════════
-with tabs[8]:
+with tabs[9]:
     st.markdown("### 💡 Automated Data Recommendations")
     st.caption("Scans your dataset and gives step-by-step, actionable guidance with exact Python code.")
 
@@ -1943,7 +2194,7 @@ with tabs[8]:
     g_col, b_col = st.columns([1, 1])
 
     with g_col:
-        st.plotly_chart(quality_gauge(qs_total), width='stretch')
+        st.plotly_chart(quality_gauge(qs_total), use_container_width=True)
 
     with b_col:
         st.markdown("&nbsp;")
@@ -2125,3 +2376,5 @@ with tabs[8]:
             f'{icon} {item} &nbsp; <span class="badge {badge_cls}">{"Done" if done else "Pending"}</span>',
             unsafe_allow_html=True,
         )
+
+    render_tab_nav(9)
