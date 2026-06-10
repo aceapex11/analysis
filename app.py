@@ -569,63 +569,7 @@ CORRELATION_METHOD_INFO = {
 }
 
 
-# ─────────────────────────────────────────────
-#  SESSION STATE
-# ─────────────────────────────────────────────
-if "df_clean" not in st.session_state:
-    st.session_state.df_clean = None
-if "clean_log" not in st.session_state:
-    st.session_state.clean_log = []
-if "df_clean_history" not in st.session_state:
-    st.session_state.df_clean_history = []  # list of (df_snapshot, log_snapshot)
 
-# ── Tab metadata ──────────────────────────────────────────────────────────────
-TAB_NAMES = [
-    "🗂 Overview",
-    "🔢 Numerical",
-    "🏷️ Categorical",
-    "📐 Correlation",
-    "📊 Charts",
-    "🔄 Transform",
-    "🧹 Data Cleaning",
-    "➕ Add Data",
-    "💾 Export",
-    "💡 Recommendations",
-]
-
-
-def _tab_progress(current_idx: int):
-    """Render a slim, honest progress strip — no fake navigation buttons."""
-    pct  = round((current_idx + 1) / len(TAB_NAMES) * 100)
-    name = TAB_NAMES[current_idx]
-    st.markdown(f"""
-    <div style="margin:28px 0 8px 0;padding:10px 16px;background:#f8fafc;
-                border:1px solid #e2e8f0;border-radius:10px;
-                display:flex;align-items:center;gap:16px;">
-        <span style="font-size:0.75rem;color:#64748b;white-space:nowrap;
-                     font-family:'JetBrains Mono',monospace;font-weight:600;">
-            {current_idx + 1}&nbsp;/&nbsp;{len(TAB_NAMES)}
-        </span>
-        <div style="flex:1;background:#e2e8f0;border-radius:6px;height:6px;">
-            <div style="width:{pct}%;height:100%;background:#6366f1;
-                        border-radius:6px;transition:width 0.3s ease;"></div>
-        </div>
-        <span style="font-size:0.75rem;color:#6366f1;font-weight:600;white-space:nowrap;">
-            {name}
-        </span>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def _save_snapshot():
-    """Push the current df_clean + log onto the undo stack (max 10 snapshots)."""
-    if st.session_state.df_clean is not None:
-        st.session_state.df_clean_history.append(
-            (st.session_state.df_clean.copy(), list(st.session_state.clean_log))
-        )
-        # Keep last 10 snapshots to avoid excessive memory usage
-        if len(st.session_state.df_clean_history) > 10:
-            st.session_state.df_clean_history.pop(0)
 
 
 # ─────────────────────────────────────────────
