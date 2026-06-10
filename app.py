@@ -939,7 +939,6 @@ with tabs[0]:
     if dupes:
         st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
 
-    _tab_progress(0)
 
 
 # ══════════════════════════════════════════════
@@ -988,7 +987,6 @@ with tabs[1]:
                 st.markdown('<div class="section-header">Variance Analysis</div>', unsafe_allow_html=True)
                 st.dataframe(variance_table(df_work, sel_num), use_container_width=True)
 
-    _tab_progress(1)
 
 
 # ══════════════════════════════════════════════
@@ -1040,7 +1038,7 @@ with tabs[2]:
                 st.metric(f"Shannon Entropy ('{col}')", f"{ent:.4f} bits",
                           delta=f"Max possible: {max_ent:.2f} bits")
 
-    _tab_progress(2)
+
 
 
 # ══════════════════════════════════════════════
@@ -1116,7 +1114,7 @@ with tabs[3]:
             </div>
             """, unsafe_allow_html=True)
 
-    _tab_progress(3)
+
 
 
 # ══════════════════════════════════════════════
@@ -1243,7 +1241,7 @@ with tabs[4]:
     except Exception as e:
         st.error(f"Chart error: {e}")
 
-    _tab_progress(4)
+
 
 
 # ══════════════════════════════════════════════
@@ -1501,7 +1499,7 @@ with tabs[5]:
                                f"Dataset now has {df_save.shape[1]} columns.")
                 st.rerun()
 
-    _tab_progress(5)
+
 
 
 # ══════════════════════════════════════════════
@@ -1820,7 +1818,7 @@ with tabs[6]:
         st.download_button("⬇️ Download ml_ready.pkl", pkl_buf,
             file_name="ml_ready.pkl", mime="application/octet-stream")
 
-    _tab_progress(6)
+
 
 
 # ══════════════════════════════════════════════
@@ -2001,7 +1999,7 @@ with tabs[7]:
                     unsafe_allow_html=True)
         st.dataframe(st.session_state.df_clean[keep].tail(20), use_container_width=True)
 
-    _tab_progress(7)
+   
 
 
 # ══════════════════════════════════════════════
@@ -2032,7 +2030,7 @@ with tabs[8]:
         st.download_button("⬇️ Summary Stats (CSV)", summary.to_csv(),
             file_name="summary_stats.csv", mime="text/csv")
 
-    _tab_progress(8)
+
 
 
 # ══════════════════════════════════════════════
@@ -2255,4 +2253,4 @@ with tabs[9]:
             unsafe_allow_html=True,
         )
 
-    _tab_progress(9)
+
