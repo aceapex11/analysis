@@ -1452,7 +1452,7 @@ with tabs[5]:
                 )
 
                 # Side-by-side before/after charts
-                chart_cols = st.columns(min(len(transforms_sel) + 1, 4))
+                chart_cols = st.columns(len(transforms_sel) + 1)
                 orig_series = df_work[t_col_sel].dropna()
                 with chart_cols[0]:
                     fig_b = go.Figure(go.Histogram(
