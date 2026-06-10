@@ -228,23 +228,12 @@ code {
 }
 
 div.stAlert { border-radius: 10px !important; }
-
-/* ── Tab Navigation Hints ── */
-.nav-hint {
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 10px 14px;
-    text-align: center;
-    font-size: 0.82rem;
-    color: #334155;
-}
 </style>
 """, unsafe_allow_html=True)
 
 
 # ─────────────────────────────────────────────
-#  CORRECTION TYPE INFO
+#  CORRECTION TYPE INFO  (new — mirrors ENCODING_INFO style)
 # ─────────────────────────────────────────────
 CORRECTION_TYPE_INFO = {
     "Fill with Mean": {
@@ -590,60 +579,6 @@ if "clean_log" not in st.session_state:
 if "df_clean_history" not in st.session_state:
     st.session_state.df_clean_history = []  # list of (df_snapshot, log_snapshot)
 
-# ── Tab metadata ──────────────────────────────────────────────────────────────
-TAB_NAMES = [
-    "🗂 Overview",
-    "🔢 Numerical",
-    "🏷️ Categorical",
-    "📐 Correlation",
-    "📊 Charts",
-    "🔄 Transform",
-    "🧹 Data Cleaning",
-    "➕ Add Data",
-    "💾 Export",
-    "💡 Recommendations",
-]
-
-
-def render_tab_nav(current_idx: int):
-    """Render Prev / Next navigation hints at the bottom of a tab.
-
-    st.tabs() tab selection cannot be driven from Python — clicking a button
-    triggers a rerun but cannot actually switch the active tab widget.
-    Instead we show a styled banner telling the user which tab to click next.
-    """
-    prev_idx = current_idx - 1
-    next_idx = current_idx + 1
-    has_prev = prev_idx >= 0
-    has_next = next_idx < len(TAB_NAMES)
-
-    left_col, mid_col, right_col = st.columns([1, 2, 1])
-
-    with left_col:
-        if has_prev:
-            st.markdown(
-                f"""<div class="nav-hint">
-                    ← Click the <b style="color:#6366f1;">{TAB_NAMES[prev_idx]}</b> tab above
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
-    with mid_col:
-        st.markdown(
-            f'<div style="text-align:center;font-size:0.78rem;color:#64748b;padding-top:10px;">'
-            f'Tab {current_idx + 1} of {len(TAB_NAMES)}</div>',
-            unsafe_allow_html=True,
-        )
-
-    with right_col:
-        if has_next:
-            st.markdown(
-                f"""<div class="nav-hint">
-                    Click <b style="color:#6366f1;">{TAB_NAMES[next_idx]}</b> tab above →
-                </div>""",
-                unsafe_allow_html=True,
-            )
-
 
 def _save_snapshot():
     """Push the current df_clean + log onto the undo stack (max 10 snapshots)."""
@@ -702,12 +637,14 @@ def render_method_card(name, info_dict):
 
 def _compute_quality_score(df, num_cols_list):
     """
-    Recomputes the data quality score locally.
+    Recomputes the data quality score locally — identical formula to DataPrep Pro's
+    calculate_data_quality_score(), so the gauge always matches the breakdown bars.
     Returns (score_0_to_100, factor_scores_dict, factor_max_dict).
     """
     miss_pct = df.isnull().sum().sum() / df.size * 100 if df.size else 0
     dup_pct  = df.duplicated().sum() / len(df) * 100 if len(df) else 0
 
+    # Average IQR outlier % across numeric columns
     avg_out_pct = 0.0
     if num_cols_list:
         out_pcts = []
@@ -722,6 +659,7 @@ def _compute_quality_score(df, num_cols_list):
             out_pcts.append(pct)
         avg_out_pct = float(np.mean(out_pcts)) if out_pcts else 0.0
 
+    # Invalid / domain values (non-negative keyword heuristic matching DataPrep Pro)
     NON_NEG_KW = ["age", "salary", "income", "revenue", "debt", "experience",
                    "weight", "height", "price", "cost", "quantity", "amount",
                    "months", "years", "tumor", "size", "count", "duration",
@@ -915,7 +853,7 @@ with st.sidebar:
         show_grid = st.toggle("Show Grid", value=True)
         template  = "plotly_dark" if dark_mode else "plotly_white"
 
-        # ── Live quality snapshot in sidebar ──────────────────
+        # ── Live quality snapshot in sidebar (uses local recompute) ───────────
         st.markdown("---")
         qs_sidebar, _, _ = _compute_quality_score(df_work, num_cols)
         rec_sidebar = build_recommendations(df_work, num_cols, cat_cols)
@@ -972,7 +910,17 @@ if df_raw is None:
 
 num_cols, cat_cols, date_cols, bool_cols = detect_col_types(df_work)
 
-tabs = st.tabs(TAB_NAMES)
+tabs = st.tabs([
+    "🗂 Overview",
+    "🔢 Numerical",
+    "🏷️ Categorical",
+    "📐 Correlation",
+    "📊 Charts",
+    "🔄 Transform",
+    "🧹 Data Cleaning",
+    "💾 Export",
+    "💡 Recommendations",
+])
 
 
 # ══════════════════════════════════════════════
@@ -1023,8 +971,6 @@ with tabs[0]:
     if dupes:
         st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
 
-    render_tab_nav(0)
-
 
 # ══════════════════════════════════════════════
 #  TAB 2 — NUMERICAL
@@ -1071,8 +1017,6 @@ with tabs[1]:
             if "Variance Analysis" in analyses:
                 st.markdown('<div class="section-header">Variance Analysis</div>', unsafe_allow_html=True)
                 st.dataframe(variance_table(df_work, sel_num), use_container_width=True)
-
-        render_tab_nav(1)
 
 
 # ══════════════════════════════════════════════
@@ -1124,8 +1068,6 @@ with tabs[2]:
                 st.metric(f"Shannon Entropy ('{col}')", f"{ent:.4f} bits",
                           delta=f"Max possible: {max_ent:.2f} bits")
 
-        render_tab_nav(2)
-
 
 # ══════════════════════════════════════════════
 #  TAB 4 — CORRELATION
@@ -1134,12 +1076,14 @@ with tabs[3]:
     if len(num_cols) < 2:
         st.warning("Need at least 2 numeric columns for correlation.")
     else:
+        # ── Method description expander ────────────────────────
         with st.expander("📖 Learn about correlation methods — Pearson vs Spearman vs Kendall", expanded=False):
             corr_method_tabs = st.tabs(list(CORRELATION_METHOD_INFO.keys()))
             for tab_cm, (m_name, m_info) in zip(corr_method_tabs, CORRELATION_METHOD_INFO.items()):
                 with tab_cm:
                     render_method_card(m_name, m_info)
 
+        # ── Quick decision helper ──────────────────────────────
         st.markdown("""
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
                     padding:14px 16px;margin:0 0 16px 0;font-size:0.85rem;color:#334155;">
@@ -1154,6 +1098,7 @@ with tabs[3]:
         corr_method = st.selectbox("Correlation Method", ["pearson", "spearman", "kendall"])
         sig_level   = st.slider("Significance Level α", 0.01, 0.10, 0.05, 0.01)
 
+        # Show active method info badge
         method_info_active = CORRELATION_METHOD_INFO.get(corr_method, {})
         st.markdown(f"""
         <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;
@@ -1185,6 +1130,7 @@ with tabs[3]:
             corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
             st.dataframe(corr_pairs_df, use_container_width=True)
 
+            # ── Interpretation guide ──────────────────────────
             st.markdown("""
             <div style="margin-top:16px;padding:14px 16px;background:#fff;border:1px solid #e2e8f0;
                         border-radius:10px;font-size:0.84rem;color:#334155;">
@@ -1199,8 +1145,6 @@ with tabs[3]:
                 always check for confounders and use domain knowledge.
             </div>
             """, unsafe_allow_html=True)
-
-        render_tab_nav(3)
 
 
 # ══════════════════════════════════════════════
@@ -1327,8 +1271,6 @@ with tabs[4]:
     except Exception as e:
         st.error(f"Chart error: {e}")
 
-    render_tab_nav(4)
-
 
 # ══════════════════════════════════════════════
 #  TAB 6 — TRANSFORM
@@ -1340,9 +1282,11 @@ with tabs[5]:
     if not num_cols:
         st.warning("No numeric columns to transform.")
     else:
+        # ── A: Skewness overview table ─────────────────────────
         st.markdown('<div class="section-header">〰️ Skewness Overview — All Numeric Columns</div>',
                     unsafe_allow_html=True)
 
+        # Reference card for skewness interpretation
         with st.expander("📖 How to read skewness — classification guide", expanded=False):
             cols_sk_ref = st.columns(5)
             for col_ref, (cls_name, cls_info) in zip(cols_sk_ref, SKEWNESS_CLASSIFICATION.items()):
@@ -1366,6 +1310,7 @@ with tabs[5]:
             </div>
             """, unsafe_allow_html=True)
 
+        # Build skewness table
         skew_rows = []
         for col in num_cols:
             s = df_work[col].dropna()
@@ -1387,6 +1332,7 @@ with tabs[5]:
             })
         skew_df = pd.DataFrame(skew_rows)
 
+        # Colour the Classification column
         def _colour_cls(val):
             colour_map = {
                 "Highly Right Skewed":     "background-color:#fef2f2;color:#dc2626;font-weight:600",
@@ -1396,7 +1342,7 @@ with tabs[5]:
                 "Approximately Normal":    "background-color:#f0fdf4;color:#16a34a;font-weight:600",
             }
             return colour_map.get(val, "")
-
+        
         st.dataframe(
             skew_df.style.map(_colour_cls, subset=["Classification"]).format(
                 {"Skewness": "{:.4f}", "Mean": "{:.4f}", "Median": "{:.4f}", "Std": "{:.4f}"}
@@ -1404,6 +1350,7 @@ with tabs[5]:
             use_container_width=True, height=min(400, 60 + 35 * len(skew_rows)),
         )
 
+        # ── B: Per-column distribution charts with skew annotation ──
         st.markdown('<div class="section-header">📊 Distribution Histograms + KDE</div>',
                     unsafe_allow_html=True)
         st.caption("Red dashed line = Mean · Green dotted line = Median · Title colour = skew severity")
@@ -1448,6 +1395,7 @@ with tabs[5]:
                     except Exception as e:
                         st.warning(f"Chart error for '{col}': {e}")
 
+        # ── C: Transformation descriptions ────────────────────────
         st.markdown('<div class="section-header">📚 Transformation Method Guide</div>',
                     unsafe_allow_html=True)
         with st.expander("📖 Learn about every transformation — which one fixes your skew?", expanded=False):
@@ -1456,6 +1404,7 @@ with tabs[5]:
                 with tab_t:
                     render_method_card(t_name, t_info)
 
+        # ── D: Apply transformation ────────────────────────────────
         st.markdown('<div class="section-header">⚡ Apply Transformation</div>', unsafe_allow_html=True)
 
         t_col_sel   = st.selectbox("Select Column to Transform", num_cols, key="t_col_main")
@@ -1514,6 +1463,7 @@ with tabs[5]:
                     use_container_width=True,
                 )
 
+                # Side-by-side before/after charts
                 chart_cols = st.columns(len(transforms_sel) + 1)
                 orig_series = df_work[t_col_sel].dropna()
                 with chart_cols[0]:
@@ -1531,6 +1481,7 @@ with tabs[5]:
                     if i < len(chart_cols):
                         col_name = f"{t_col_sel}_{t_name.split()[0].lower()}"
                         if col_name not in df_transformed.columns:
+                            # Try to find by partial match
                             matches = [c for c in df_transformed.columns if c.startswith(t_col_sel + "_") and c != t_col_sel]
                             col_name = matches[i-1] if i-1 < len(matches) else None
                         if col_name and col_name in df_transformed.columns:
@@ -1554,6 +1505,7 @@ with tabs[5]:
 
                 st.success("✅ Transformations previewed above.")
 
+            # ── Apply & Save button ──────────────────────────────
             st.markdown("**Save transformation(s) to the working dataset:**")
             if st.button("💾 Apply & Save Transformation(s)", key="btn_apply_transform"):
                 _save_snapshot()
@@ -1563,6 +1515,7 @@ with tabs[5]:
                     df_save, _, t_errors = apply_transforms(df_save, t_col_sel, [t_name])
                     for t_n, err in t_errors.items():
                         st.warning(f"⚠️ Could not apply '{t_n}': {err}")
+                    # figure out the new column name that was added
                     suffix_map = {
                         "Log (log1p)":               f"{t_col_sel}_log1p",
                         "Square Root":               f"{t_col_sel}_sqrt",
@@ -1584,8 +1537,6 @@ with tabs[5]:
                     st.success(f"Saved {len(saved_cols)} new column(s): {', '.join(saved_cols)}. "
                                f"Dataset now has {df_save.shape[1]} columns.")
                 st.rerun()
-
-        render_tab_nav(5)
 
 
 # ══════════════════════════════════════════════
@@ -1635,6 +1586,7 @@ with tabs[6]:
     # ── B: Missing Value Imputation ───────────────────────────
     st.markdown('<div class="section-header">🕳️ Missing Value Imputation</div>', unsafe_allow_html=True)
 
+    # ── NEW: Imputation strategy info expander (mirrors outlier expander style) ──
     with st.expander("📖 Learn about imputation / correction strategies — which one to choose?", expanded=False):
         corr_tabs = st.tabs(list(CORRECTION_TYPE_INFO.keys()))
         for tab_c, (method_name, info) in zip(corr_tabs, CORRECTION_TYPE_INFO.items()):
@@ -1847,6 +1799,7 @@ with tabs[6]:
                 key="enc_method_select",
             )
 
+            # Ordinal order input
             ordinal_order_input = None
             if enc_method == "Ordinal Encoding":
                 unique_vals = sorted(df_clean_work[enc_col].dropna().astype(str).unique())
@@ -1860,10 +1813,12 @@ with tabs[6]:
                 )
                 ordinal_order_input = [v.strip() for v in ordinal_str.split(",") if v.strip()]
 
+            # Live preview
             st.markdown("**Preview (first 30 rows):**")
             preview_enc = encoding_preview(df_work[enc_col], enc_col, enc_method)
             st.dataframe(preview_enc.head(30), use_container_width=True)
 
+            # Apply & Save button
             st.markdown("**Apply encoding to the working dataset:**")
             c_enc1, c_enc2 = st.columns([2, 1])
             with c_enc1:
@@ -1904,194 +1859,11 @@ with tabs[6]:
         st.download_button("⬇️ Download ml_ready.pkl", pkl_buf,
             file_name="ml_ready.pkl", mime="application/octet-stream")
 
-    render_tab_nav(6)
-
 
 # ══════════════════════════════════════════════
-#  TAB 8 — ADD DATA
+#  TAB 8 — EXPORT
 # ══════════════════════════════════════════════
 with tabs[7]:
-    st.markdown("### ➕ Add Data to Dataset")
-    st.caption("Manually add new rows to your working dataset. Changes are saved to the cleaned dataset and reflected across all tabs.")
-
-    if df_raw is None:
-        st.info("Upload a dataset first to add rows.")
-    else:
-        df_add_work = st.session_state.df_clean[keep].copy()
-        num_c_add, cat_c_add, _, _ = detect_col_types(df_add_work)
-
-        st.markdown('<div class="section-header">📋 Current Dataset</div>', unsafe_allow_html=True)
-        add_m1, add_m2, add_m3 = st.columns(3)
-        with add_m1:
-            metric_card(f"{len(df_add_work):,}", "Total Rows")
-        with add_m2:
-            metric_card(f"{len(df_add_work.columns)}", "Columns")
-        with add_m3:
-            metric_card(f"{df_add_work.isnull().sum().sum():,}", "Missing Values")
-
-        st.markdown("&nbsp;")
-
-        st.markdown('<div class="section-header">✍️ Enter New Row(s)</div>', unsafe_allow_html=True)
-        n_rows_to_add = st.number_input(
-            "How many rows do you want to add?", min_value=1, max_value=50, value=1, step=1,
-            key="n_rows_add"
-        )
-
-        st.info(f"Fill in values for each column. Leave blank to insert a missing value (NaN).")
-
-        new_rows_data = []
-        for row_i in range(int(n_rows_to_add)):
-            if n_rows_to_add > 1:
-                st.markdown(f"**Row {row_i + 1}**")
-            row_vals = {}
-            col_groups = [df_add_work.columns.tolist()[i:i+3]
-                          for i in range(0, len(df_add_work.columns), 3)]
-            for grp in col_groups:
-                form_cols = st.columns(len(grp))
-                for fc, col in zip(form_cols, grp):
-                    with fc:
-                        is_numeric = col in num_c_add
-                        is_cat     = col in cat_c_add
-
-                        if is_numeric:
-                            raw_val = st.text_input(
-                                f"{col} *(numeric)*",
-                                value="",
-                                placeholder="e.g. 42.5",
-                                key=f"add_row{row_i}_{col}",
-                            )
-                            if raw_val.strip() == "":
-                                row_vals[col] = np.nan
-                            else:
-                                try:
-                                    row_vals[col] = float(raw_val)
-                                except ValueError:
-                                    st.warning(f"'{col}': '{raw_val}' is not numeric — stored as NaN")
-                                    row_vals[col] = np.nan
-                        elif is_cat:
-                            unique_vals = df_add_work[col].dropna().unique().tolist()
-                            if len(unique_vals) <= 30:
-                                options = ["(blank / NaN)"] + [str(v) for v in sorted(unique_vals)]
-                                chosen = st.selectbox(
-                                    f"{col} *(categorical)*",
-                                    options,
-                                    key=f"add_row{row_i}_{col}",
-                                )
-                                row_vals[col] = np.nan if chosen == "(blank / NaN)" else chosen
-                            else:
-                                raw_val = st.text_input(
-                                    f"{col} *(categorical)*",
-                                    value="",
-                                    placeholder="Type a value",
-                                    key=f"add_row{row_i}_{col}",
-                                )
-                                row_vals[col] = np.nan if raw_val.strip() == "" else raw_val.strip()
-                        else:
-                            raw_val = st.text_input(
-                                f"{col}",
-                                value="",
-                                placeholder="Enter value",
-                                key=f"add_row{row_i}_{col}",
-                            )
-                            row_vals[col] = np.nan if raw_val.strip() == "" else raw_val.strip()
-
-            new_rows_data.append(row_vals)
-            if n_rows_to_add > 1 and row_i < n_rows_to_add - 1:
-                st.markdown("---")
-
-        st.markdown('<div class="section-header">👁️ Preview New Row(s)</div>', unsafe_allow_html=True)
-        preview_new = pd.DataFrame(new_rows_data, columns=df_add_work.columns)
-        st.dataframe(preview_new, use_container_width=True)
-
-        st.markdown('<div class="section-header">📥 Bulk Import via CSV Paste</div>', unsafe_allow_html=True)
-        st.caption("Paste CSV text below (with header row matching your dataset columns) to add multiple rows at once.")
-
-        cols_hint = ", ".join(df_add_work.columns.tolist())
-        csv_paste = st.text_area(
-            "Paste CSV rows here",
-            height=120,
-            placeholder=f"Header: {cols_hint}\nRow 1: value1, value2, ...\nRow 2: value1, value2, ...",
-            key="csv_paste_input",
-        )
-
-        bulk_rows_preview = None
-        if csv_paste.strip():
-            try:
-                import io as _io
-                bulk_rows_preview = pd.read_csv(_io.StringIO(csv_paste.strip()))
-                st.success(f"✅ Parsed {len(bulk_rows_preview)} row(s) from pasted CSV")
-                st.dataframe(bulk_rows_preview, use_container_width=True)
-            except Exception as e:
-                st.error(f"Could not parse CSV: {e}")
-                bulk_rows_preview = None
-
-        st.markdown("&nbsp;")
-        btn_col_a, btn_col_b, btn_col_c = st.columns([2, 2, 1])
-
-        with btn_col_a:
-            if st.button("✅ Add Manually Entered Row(s)", key="btn_add_manual_rows",
-                         use_container_width=True):
-                _save_snapshot()
-                df_combined = pd.concat(
-                    [st.session_state.df_clean, preview_new],
-                    ignore_index=True,
-                )
-                for col in num_c_add:
-                    if col in df_combined.columns:
-                        df_combined[col] = pd.to_numeric(df_combined[col], errors="coerce")
-                st.session_state.df_clean = df_combined
-                st.session_state.clean_log.append(
-                    f"➕ Added {len(preview_new)} row(s) manually. "
-                    f"Dataset now has {len(df_combined):,} rows."
-                )
-                st.success(
-                    f"✅ {len(preview_new)} row(s) added! Dataset now has {len(df_combined):,} rows."
-                )
-                st.rerun()
-
-        with btn_col_b:
-            if bulk_rows_preview is not None:
-                if st.button("📥 Add Bulk CSV Row(s)", key="btn_add_bulk_rows",
-                             use_container_width=True):
-                    _save_snapshot()
-                    df_combined = pd.concat(
-                        [st.session_state.df_clean, bulk_rows_preview],
-                        ignore_index=True,
-                    )
-                    for col in num_c_add:
-                        if col in df_combined.columns:
-                            df_combined[col] = pd.to_numeric(df_combined[col], errors="coerce")
-                    st.session_state.df_clean = df_combined
-                    st.session_state.clean_log.append(
-                        f"➕ Bulk-imported {len(bulk_rows_preview)} row(s) via CSV paste. "
-                        f"Dataset now has {len(df_combined):,} rows."
-                    )
-                    st.success(
-                        f"✅ {len(bulk_rows_preview)} row(s) added! Dataset now has {len(df_combined):,} rows."
-                    )
-                    st.rerun()
-
-        with btn_col_c:
-            if st.button("↩️ Undo", key="btn_undo_add",
-                         disabled=len(st.session_state.df_clean_history) == 0,
-                         use_container_width=True):
-                prev_df, prev_log = st.session_state.df_clean_history.pop()
-                st.session_state.df_clean = prev_df
-                st.session_state.clean_log = prev_log
-                st.success("Last add operation undone.")
-                st.rerun()
-
-        st.markdown('<div class="section-header">📊 Updated Dataset (last 20 rows)</div>',
-                    unsafe_allow_html=True)
-        st.dataframe(st.session_state.df_clean[keep].tail(20), use_container_width=True)
-
-        render_tab_nav(7)
-
-
-# ══════════════════════════════════════════════
-#  TAB 9 — EXPORT
-# ══════════════════════════════════════════════
-with tabs[8]:
     st.markdown('<div class="section-header">Export Data</div>', unsafe_allow_html=True)
 
     export_choice = st.radio("Export Which Dataset?",
@@ -2116,20 +1888,20 @@ with tabs[8]:
         st.download_button("⬇️ Summary Stats (CSV)", summary.to_csv(),
             file_name="summary_stats.csv", mime="text/csv")
 
-    render_tab_nav(8)
-
 
 # ══════════════════════════════════════════════
-#  TAB 10 — RECOMMENDATIONS
+#  TAB 9 — RECOMMENDATIONS  (fully rebuilt)
 # ══════════════════════════════════════════════
-with tabs[9]:
+with tabs[8]:
     st.markdown("### 💡 Automated Data Recommendations")
     st.caption("Scans your dataset and gives step-by-step, actionable guidance with exact Python code.")
 
     rec = build_recommendations(df_work, num_cols, cat_cols)
 
+    # ── FIXED: recompute score locally so gauge matches breakdown bars ─────────
     qs_total, factor_scores, factor_max = _compute_quality_score(df_work, num_cols)
 
+    # Derive grade & counts from recomputed score (matches DataPrep Pro logic)
     def _grade(s):
         if s >= 90: return "A"
         if s >= 80: return "B"
@@ -2137,6 +1909,7 @@ with tabs[9]:
         if s >= 60: return "D"
         return "F"
 
+    # Count critical / warning items from the recommendations dict
     _n_crit = (
         (1 if rec["duplicates"]["count"] > 0 and rec["duplicates"]["pct"] > 5 else 0)
         + sum(1 for m in rec.get("missing", [])    if m["pct"] > 30)
@@ -2152,6 +1925,7 @@ with tabs[9]:
         + sum(1 for r in rec.get("high_corr",  []))
     )
 
+    # ── Quality Gauge + Scorecard ──────────────────────────────
     st.markdown('<div class="section-header">📊 Data Quality Scorecard</div>', unsafe_allow_html=True)
 
     g_col, b_col = st.columns([1, 1])
@@ -2177,6 +1951,7 @@ with tabs[9]:
         st.markdown("&nbsp;")
         quality_breakdown_bars(factor_scores, factor_max)
 
+    # ── Overall verdict ────────────────────────────────────────
     total_issues = _n_crit + _n_warn
     if qs_total >= 90:
         st.success("🎉 Excellent dataset quality — ready for analysis or modelling!")
@@ -2189,7 +1964,7 @@ with tabs[9]:
 
     st.markdown("---")
 
-    # 1. Duplicates
+    # 1. Duplicates ────────────────────────────────────────────
     st.markdown('<div class="section-header">1️⃣ Duplicate Rows</div>', unsafe_allow_html=True)
     d = rec["duplicates"]
     if d["count"] == 0:
@@ -2202,7 +1977,7 @@ with tabs[9]:
             f"<b>Fix:</b> Go to 🧹 Data Cleaning → <i>Duplicate Removal</i>, or run:<br>"
             f"<code>df.drop_duplicates(inplace=True)</code>")
 
-    # 2. Missing Values
+    # 2. Missing Values ────────────────────────────────────────
     st.markdown('<div class="section-header">2️⃣ Missing Values</div>', unsafe_allow_html=True)
     if not rec.get("missing"):
         render_rec_card("ok", "No missing values", "All columns are complete. ✅")
@@ -2228,7 +2003,7 @@ with tabs[9]:
                 f"• Mode: <code>df['{col}'].fillna(df['{col}'].mode()[0], inplace=True)</code><br>"
                 f"• Unknown: <code>df['{col}'].fillna('Unknown', inplace=True)</code>")
 
-    # 3. Skewness
+    # 3. Skewness ──────────────────────────────────────────────
     st.markdown('<div class="section-header">3️⃣ Skewness & Normality</div>', unsafe_allow_html=True)
     if not rec.get("skewness"):
         render_rec_card("ok", "All numeric columns have acceptable skewness",
@@ -2246,7 +2021,7 @@ with tabs[9]:
             f"   df['{col}_yj'] = pt.fit_transform(df[['{col}']])</code><br>"
             f"3. Re-check: <code>df['{col}_log'].skew()</code> — aim for |skew| &lt; 0.5")
 
-    # 4. Outliers
+    # 4. Outliers ──────────────────────────────────────────────
     st.markdown('<div class="section-header">4️⃣ Outlier Detection</div>', unsafe_allow_html=True)
     if not rec.get("outliers"):
         render_rec_card("ok", "No significant outliers detected (IQR method)",
@@ -2264,7 +2039,7 @@ with tabs[9]:
             f"  df.loc[mask,'{col}']=df['{col}'].median()</code><br>"
             f"• Remove: <code>df=df[~mask].reset_index(drop=True)</code>")
 
-    # 5. Cardinality
+    # 5. Cardinality ───────────────────────────────────────────
     st.markdown('<div class="section-header">5️⃣ Categorical Cardinality</div>', unsafe_allow_html=True)
     card_high  = [r for r in rec.get("cardinality", []) if r["n_unique"] > 50]
     card_const = [r for r in rec.get("cardinality", []) if r["n_unique"] == 1]
@@ -2284,7 +2059,7 @@ with tabs[9]:
             f"• Group rare: <code>top=df['{col}'].value_counts().head(20).index<br>"
             f"  df['{col}']=df['{col}'].where(df['{col}'].isin(top),other='Other')</code>")
 
-    # 6. Low Variance
+    # 6. Low Variance ──────────────────────────────────────────
     st.markdown('<div class="section-header">6️⃣ Low / Zero Variance Columns</div>', unsafe_allow_html=True)
     if not rec.get("low_variance"):
         render_rec_card("ok", "All numeric columns have adequate variance", "✅")
@@ -2297,7 +2072,7 @@ with tabs[9]:
             render_rec_card("info", f"'{col}' has very low variance (CV = {r['cv_pct']}%)",
                 "Consider whether this column is meaningful before including in models.")
 
-    # 7. Class Imbalance
+    # 7. Class Imbalance ───────────────────────────────────────
     st.markdown('<div class="section-header">7️⃣ Class Distribution (Categorical)</div>', unsafe_allow_html=True)
     if not rec.get("imbalance"):
         render_rec_card("ok", "No severe class imbalance detected",
@@ -2313,7 +2088,7 @@ with tabs[9]:
             f"• Use <code>class_weight='balanced'</code> in sklearn models<br>"
             f"• Evaluate with F1, AUC-ROC instead of accuracy")
 
-    # 8. Multicollinearity
+    # 8. Multicollinearity ─────────────────────────────────────
     if len(num_cols) >= 2:
         st.markdown('<div class="section-header">8️⃣ Multicollinearity (High Correlation)</div>',
                     unsafe_allow_html=True)
@@ -2329,7 +2104,7 @@ with tabs[9]:
                 f"• Use PCA to combine correlated features<br>"
                 f"• Use regularisation (Ridge/Lasso)")
 
-    # 9. EDA Checklist
+    # 9. EDA Checklist ─────────────────────────────────────────
     st.markdown('<div class="section-header">✅ Complete EDA Checklist</div>', unsafe_allow_html=True)
     for item, done in rec.get("checklist", []):
         badge_cls = "badge-ok" if done else "badge-warn"
@@ -2338,5 +2113,3 @@ with tabs[9]:
             f'{icon} {item} &nbsp; <span class="badge {badge_cls}">{"Done" if done else "Pending"}</span>',
             unsafe_allow_html=True,
         )
-
-    render_tab_nav(9)
