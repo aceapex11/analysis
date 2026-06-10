@@ -239,6 +239,15 @@ code {
 }
 
 div.stAlert { border-radius: 10px !important; }
+
+/* Prevent white flash on st.rerun() */
+html, body, [data-testid="stAppViewContainer"], .stApp {
+    background-color: var(--bg) !important;
+    transition: none !important;
+}
+[data-testid="stAppViewContainer"] > div {
+    background-color: var(--bg) !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1537,8 +1546,8 @@ with tabs[5]:
                         f"✅ Transform applied: '{t_col_sel}' → '{sc}'"
                     )
                 if saved_cols:
-                    st.success(f"Saved {len(saved_cols)} new column(s): {', '.join(saved_cols)}. "
-                               f"Dataset now has {df_save.shape[1]} columns.")
+                    st.toast(f"Saved {len(saved_cols)} new column(s): {', '.join(saved_cols)}. "
+                             f"Dataset now has {df_save.shape[1]} columns.", icon="✅")
                 st.rerun()
 
 
@@ -1581,7 +1590,7 @@ with tabs[6]:
         st.session_state.df_clean = df_new
         st.session_state.clean_log.append(
             f"✅ Removed {removed} duplicate rows (keep='{dup_keep}')")
-        st.success(f"Removed {removed} rows. Dataset now has {len(df_new):,} rows.")
+        st.toast(f"Removed {removed} rows. Dataset now has {len(df_new):,} rows.", icon="✅")
         st.rerun()
 
     st.divider()
@@ -1669,7 +1678,7 @@ with tabs[6]:
             st.session_state.df_clean = df_imp
             for a in applied:
                 st.session_state.clean_log.append(f"✅ Imputed: {a}")
-            st.success(f"Applied imputation to {len(applied)} column(s).")
+            st.toast(f"Applied imputation to {len(applied)} column(s).", icon="✅")
             st.rerun()
 
     st.divider()
@@ -1733,7 +1742,7 @@ with tabs[6]:
             )
             st.session_state.df_clean = df_new
             st.session_state.clean_log.append(f"✅ {msg}")
-            st.success(msg)
+            st.toast(msg, icon="✅")
             st.rerun()
 
     st.divider()
@@ -1753,14 +1762,14 @@ with tabs[6]:
                 prev_df, prev_log = st.session_state.df_clean_history.pop()
                 st.session_state.df_clean = prev_df
                 st.session_state.clean_log = prev_log
-                st.success("Last operation undone.")
+                st.toast("Last operation undone.", icon="✅")
                 st.rerun()
         with btn_col2:
             if st.button("🔄 Reset to Original Data", key="btn_reset"):
                 st.session_state.df_clean = df_raw.copy()
                 st.session_state.clean_log = []
                 st.session_state.df_clean_history = []
-                st.success("Dataset reset to original.")
+                st.toast("Dataset reset to original.", icon="✅")
                 st.rerun()
 
     st.divider()
@@ -1846,7 +1855,7 @@ with tabs[6]:
                     )
                     st.session_state.df_clean = df_enc
                     st.session_state.clean_log.append(f"✅ {enc_log}")
-                    st.success(enc_log)
+                    st.toast(enc_log, icon="✅")
                     st.rerun()
     else:
         st.info("No categorical columns found for encoding preview.")
