@@ -229,27 +229,7 @@ code {
 
 div.stAlert { border-radius: 10px !important; }
 
-/* ── Tab Navigation Buttons ── */
-.nav-btn-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 32px 0 8px 0;
-    padding: 14px 18px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    gap: 12px;
-}
-.nav-tab-label {
-    font-size: 0.78rem;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-weight: 600;
-    text-align: center;
-    flex: 1;
-}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -600,8 +580,6 @@ if "clean_log" not in st.session_state:
     st.session_state.clean_log = []
 if "df_clean_history" not in st.session_state:
     st.session_state.df_clean_history = []  # list of (df_snapshot, log_snapshot)
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = 0
 
 # ── Tab metadata ──────────────────────────────────────────────────────────────
 TAB_NAMES = [
@@ -616,33 +594,6 @@ TAB_NAMES = [
     "💾 Export",
     "💡 Recommendations",
 ]
-
-def render_tab_nav(current_idx: int):
-    """Render Prev / Next navigation buttons at the bottom of a tab."""
-    prev_idx = current_idx - 1
-    next_idx = current_idx + 1
-    has_prev = prev_idx >= 0
-    has_next = next_idx < len(TAB_NAMES)
-
-    left_col, mid_col, right_col = st.columns([1, 2, 1])
-    with left_col:
-        if has_prev:
-            if st.button(f"← {TAB_NAMES[prev_idx]}", key=f"nav_prev_{current_idx}",
-                         use_container_width=True):
-                st.session_state.active_tab = prev_idx
-                st.rerun()
-    with mid_col:
-        st.markdown(
-            f'<div style="text-align:center;font-size:0.78rem;color:var(--muted,#64748b);">'
-            f'Tab {current_idx + 1} of {len(TAB_NAMES)}</div>',
-            unsafe_allow_html=True,
-        )
-    with right_col:
-        if has_next:
-            if st.button(f"{TAB_NAMES[next_idx]} →", key=f"nav_next_{current_idx}",
-                         use_container_width=True):
-                st.session_state.active_tab = next_idx
-                st.rerun()
 
 
 def _save_snapshot():
@@ -1026,7 +977,6 @@ with tabs[0]:
     if dupes:
         st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
 
-    render_tab_nav(0)
 
 
 # ══════════════════════════════════════════════
@@ -1075,7 +1025,6 @@ with tabs[1]:
                 st.markdown('<div class="section-header">Variance Analysis</div>', unsafe_allow_html=True)
                 st.dataframe(variance_table(df_work, sel_num), use_container_width=True)
 
-        render_tab_nav(1)
 
 
 # ══════════════════════════════════════════════
@@ -1127,7 +1076,6 @@ with tabs[2]:
                 st.metric(f"Shannon Entropy ('{col}')", f"{ent:.4f} bits",
                           delta=f"Max possible: {max_ent:.2f} bits")
 
-        render_tab_nav(2)
 
 
 # ══════════════════════════════════════════════
@@ -1207,7 +1155,6 @@ with tabs[3]:
             </div>
             """, unsafe_allow_html=True)
 
-        render_tab_nav(3)
 
 
 # ══════════════════════════════════════════════
@@ -1334,7 +1281,6 @@ with tabs[4]:
     except Exception as e:
         st.error(f"Chart error: {e}")
 
-    render_tab_nav(4)
 
 
 # ══════════════════════════════════════════════
@@ -1603,7 +1549,6 @@ with tabs[5]:
                                f"Dataset now has {df_save.shape[1]} columns.")
                 st.rerun()
 
-        render_tab_nav(5)
 
 
 # ══════════════════════════════════════════════
@@ -1926,7 +1871,6 @@ with tabs[6]:
         st.download_button("⬇️ Download ml_ready.pkl", pkl_buf,
             file_name="ml_ready.pkl", mime="application/octet-stream")
 
-    render_tab_nav(6)
 
 
 # ══════════════════════════════════════════════
@@ -2118,7 +2062,6 @@ with tabs[7]:
                     unsafe_allow_html=True)
         st.dataframe(st.session_state.df_clean[keep].tail(20), use_container_width=True)
 
-        render_tab_nav(7)
 
 
 # ══════════════════════════════════════════════
@@ -2149,7 +2092,6 @@ with tabs[8]:
         st.download_button("⬇️ Summary Stats (CSV)", summary.to_csv(),
             file_name="summary_stats.csv", mime="text/csv")
 
-    render_tab_nav(8)
 
 
 # ══════════════════════════════════════════════
@@ -2376,5 +2318,3 @@ with tabs[9]:
             f'{icon} {item} &nbsp; <span class="badge {badge_cls}">{"Done" if done else "Pending"}</span>',
             unsafe_allow_html=True,
         )
-
-    render_tab_nav(9)
