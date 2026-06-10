@@ -27,7 +27,7 @@ from processing import (
     frequency_table, rare_categories, shannon_entropy,
     correlation_pairs,
     remove_duplicates, impute_column, treat_outliers,
-    apply_transforms, encoding_preview,
+    apply_transforms, apply_encoding, encoding_preview,
     build_recommendations,
     OUTLIER_DETECTION_INFO, OUTLIER_ACTION_INFO, ENCODING_INFO,
     get_best_encoding_recommendation,
@@ -577,6 +577,19 @@ if "df_clean" not in st.session_state:
     st.session_state.df_clean = None
 if "clean_log" not in st.session_state:
     st.session_state.clean_log = []
+if "df_clean_history" not in st.session_state:
+    st.session_state.df_clean_history = []  # list of (df_snapshot, log_snapshot)
+
+
+def _save_snapshot():
+    """Push the current df_clean + log onto the undo stack (max 10 snapshots)."""
+    if st.session_state.df_clean is not None:
+        st.session_state.df_clean_history.append(
+            (st.session_state.df_clean.copy(), list(st.session_state.clean_log))
+        )
+        # Keep last 10 snapshots to avoid excessive memory usage
+        if len(st.session_state.df_clean_history) > 10:
+            st.session_state.df_clean_history.pop(0)
 
 
 # ─────────────────────────────────────────────
@@ -1491,7 +1504,40 @@ with tabs[5]:
                                 )
                                 st.plotly_chart(fig_a, use_container_width=True)
 
-                st.success("✅ Transformations previewed above. Download from the Export tab.")
+                st.success("✅ Transformations previewed above.")
+
+            # ── Apply & Save button ──────────────────────────────
+            st.markdown("**Save transformation(s) to the working dataset:**")
+            if st.button("💾 Apply & Save Transformation(s)", key="btn_apply_transform"):
+                _save_snapshot()
+                df_save = st.session_state.df_clean.copy()
+                saved_cols = []
+                for t_name in transforms_sel:
+                    df_save, _, t_errors = apply_transforms(df_save, t_col_sel, [t_name])
+                    for t_n, err in t_errors.items():
+                        st.warning(f"⚠️ Could not apply '{t_n}': {err}")
+                    # figure out the new column name that was added
+                    suffix_map = {
+                        "Log (log1p)":               f"{t_col_sel}_log1p",
+                        "Square Root":               f"{t_col_sel}_sqrt",
+                        "Box-Cox":                   f"{t_col_sel}_boxcox",
+                        "Yeo-Johnson":               f"{t_col_sel}_yeojohnson",
+                        "Standard Scaling (Z-score)":f"{t_col_sel}_zscore",
+                        "MinMax Scaling [0,1]":      f"{t_col_sel}_minmax",
+                        "Robust Scaling":            f"{t_col_sel}_robust",
+                    }
+                    new_col = suffix_map.get(t_name)
+                    if new_col and new_col in df_save.columns:
+                        saved_cols.append(new_col)
+                st.session_state.df_clean = df_save
+                for sc in saved_cols:
+                    st.session_state.clean_log.append(
+                        f"✅ Transform applied: '{t_col_sel}' → '{sc}'"
+                    )
+                if saved_cols:
+                    st.success(f"Saved {len(saved_cols)} new column(s): {', '.join(saved_cols)}. "
+                               f"Dataset now has {df_save.shape[1]} columns.")
+                st.rerun()
 
 
 # ══════════════════════════════════════════════
@@ -1525,6 +1571,7 @@ with tabs[6]:
         """, unsafe_allow_html=True)
 
     if st.button("🗑️ Remove Duplicates", disabled=(dup_count == 0), key="btn_dup"):
+        _save_snapshot()
         subset_arg = dup_subset if dup_subset else None
         keep_arg   = False if "none" in dup_keep else dup_keep
         df_new, removed = remove_duplicates(st.session_state.df_clean,
@@ -1607,6 +1654,7 @@ with tabs[6]:
         }
 
         if st.button("✅ Apply Imputation", key="btn_impute"):
+            _save_snapshot()
             df_imp = st.session_state.df_clean.copy()
             applied = []
             for col, (method, const_val) in impute_actions.items():
@@ -1675,6 +1723,7 @@ with tabs[6]:
         }
 
         if st.button(f"⚡ Apply Outlier Treatment to '{out_col}'", key="btn_out"):
+            _save_snapshot()
             df_new, n_affected, msg = treat_outliers(
                 st.session_state.df_clean, out_col,
                 detection=_DET_MAP[out_method],
@@ -1694,16 +1743,28 @@ with tabs[6]:
     else:
         for i, entry in enumerate(st.session_state.clean_log, 1):
             st.markdown(f"**{i}.** {entry}")
-        if st.button("🔄 Reset to Original Data", key="btn_reset"):
-            st.session_state.df_clean = df_raw.copy()
-            st.session_state.clean_log = []
-            st.success("Dataset reset to original.")
-            st.rerun()
+
+        btn_col1, btn_col2 = st.columns(2)
+        with btn_col1:
+            if st.button("↩️ Undo Last Step", key="btn_undo",
+                         disabled=len(st.session_state.df_clean_history) == 0):
+                prev_df, prev_log = st.session_state.df_clean_history.pop()
+                st.session_state.df_clean = prev_df
+                st.session_state.clean_log = prev_log
+                st.success("Last operation undone.")
+                st.rerun()
+        with btn_col2:
+            if st.button("🔄 Reset to Original Data", key="btn_reset"):
+                st.session_state.df_clean = df_raw.copy()
+                st.session_state.clean_log = []
+                st.session_state.df_clean_history = []
+                st.success("Dataset reset to original.")
+                st.rerun()
 
     st.divider()
 
     # ── E: ML-Ready / Encoding Preview ────────────────────────
-    st.markdown('<div class="section-header">🤖 Encoding Preview & ML-Ready Export</div>',
+    st.markdown('<div class="section-header">🤖 Encoding & ML-Ready Export</div>',
                 unsafe_allow_html=True)
 
     with st.expander("📖 Learn about encoding methods — which one to choose?", expanded=False):
@@ -1713,7 +1774,7 @@ with tabs[6]:
                 render_method_card(enc_name, info)
 
     if cat_cols:
-        enc_col = st.selectbox("Column to Preview", cat_cols, key="enc_col_select")
+        enc_col = st.selectbox("Column to Preview / Encode", cat_cols, key="enc_col_select")
 
         if enc_col in cat_cols:
             enc_rec = get_best_encoding_recommendation(df_work[enc_col])
@@ -1731,15 +1792,60 @@ with tabs[6]:
             """, unsafe_allow_html=True)
 
             enc_method = st.selectbox(
-                "Encoding Method (preview only)",
+                "Encoding Method",
                 ["Label Encoding", "One-Hot Encoding", "Ordinal Encoding", "Frequency Encoding"],
                 index=["Label Encoding","One-Hot Encoding","Ordinal Encoding","Frequency Encoding"].index(
                     enc_rec["recommended"]) if enc_rec["recommended"] in
                     ["Label Encoding","One-Hot Encoding","Ordinal Encoding","Frequency Encoding"] else 0,
                 key="enc_method_select",
             )
+
+            # Ordinal order input
+            ordinal_order_input = None
+            if enc_method == "Ordinal Encoding":
+                unique_vals = sorted(df_clean_work[enc_col].dropna().astype(str).unique())
+                st.caption(f"Unique values detected: {', '.join(unique_vals)}")
+                ordinal_str = st.text_input(
+                    "Define ordinal order (comma-separated, lowest → highest)",
+                    value=", ".join(unique_vals),
+                    key="ordinal_order_input",
+                    help="Enter category names separated by commas in ascending order. "
+                         "E.g.: Low, Medium, High",
+                )
+                ordinal_order_input = [v.strip() for v in ordinal_str.split(",") if v.strip()]
+
+            # Live preview
+            st.markdown("**Preview (first 30 rows):**")
             preview_enc = encoding_preview(df_work[enc_col], enc_col, enc_method)
             st.dataframe(preview_enc.head(30), use_container_width=True)
+
+            # Apply & Save button
+            st.markdown("**Apply encoding to the working dataset:**")
+            c_enc1, c_enc2 = st.columns([2, 1])
+            with c_enc1:
+                if enc_method == "One-Hot Encoding":
+                    st.caption(
+                        f"ℹ️ One-Hot will **replace** '{enc_col}' with "
+                        f"{enc_rec['n_unique']} binary columns."
+                    )
+                else:
+                    st.caption(
+                        f"ℹ️ A new encoded column will be **added** alongside '{enc_col}'. "
+                        f"Original column is preserved."
+                    )
+            with c_enc2:
+                if st.button("✅ Apply Encoding", key="btn_apply_enc"):
+                    _save_snapshot()
+                    df_enc, enc_log = apply_encoding(
+                        st.session_state.df_clean,
+                        enc_col,
+                        enc_method,
+                        ordinal_order=ordinal_order_input,
+                    )
+                    st.session_state.df_clean = df_enc
+                    st.session_state.clean_log.append(f"✅ {enc_log}")
+                    st.success(enc_log)
+                    st.rerun()
     else:
         st.info("No categorical columns found for encoding preview.")
 
