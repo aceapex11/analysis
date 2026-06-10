@@ -35,6 +35,16 @@ from processing import (
 
 warnings.filterwarnings("ignore")
 
+# ─────────────────────────────────────────────
+#  SESSION STATE  (must be initialised before sidebar runs)
+# ─────────────────────────────────────────────
+if "df_clean" not in st.session_state:
+    st.session_state.df_clean = None
+if "clean_log" not in st.session_state:
+    st.session_state.clean_log = []
+if "df_clean_history" not in st.session_state:
+    st.session_state.df_clean_history = []
+
 
 # ─────────────────────────────────────────────
 #  PAGE CONFIG & STYLES
@@ -570,15 +580,7 @@ CORRELATION_METHOD_INFO = {
 }
 
 
-# ─────────────────────────────────────────────
-#  SESSION STATE
-# ─────────────────────────────────────────────
-if "df_clean" not in st.session_state:
-    st.session_state.df_clean = None
-if "clean_log" not in st.session_state:
-    st.session_state.clean_log = []
-if "df_clean_history" not in st.session_state:
-    st.session_state.df_clean_history = []  # list of (df_snapshot, log_snapshot)
+
 
 
 def _save_snapshot():
@@ -940,10 +942,10 @@ with tabs[0]:
             metric_card(val, label)
 
     st.markdown("&nbsp;")
-    st.dataframe(df_work.head(50), use_container_width=True)
+    st.dataframe(df_work.head(50), width='stretch')
 
     st.markdown('<div class="section-header">Data Types & Quality</div>', unsafe_allow_html=True)
-    st.dataframe(dtype_quality_table(df_work), use_container_width=True)
+    st.dataframe(dtype_quality_table(df_work), width='stretch')
 
     st.markdown('<div class="section-header">Missing Values</div>', unsafe_allow_html=True)
     miss = missing_summary(df_work)
@@ -956,7 +958,7 @@ with tabs[0]:
                      template=template, height=int(chart_h // 1.5))
         fig.update_layout(font_size=font_sz, showlegend=False,
                           paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width='stretch')
 
     st.markdown('<div class="section-header">Duplicate Analysis</div>', unsafe_allow_html=True)
     dupes = duplicate_rows(df_work)
@@ -970,7 +972,7 @@ with tabs[0]:
             "#dc2626" if dupes > 0 else "#16a34a",
         )
     if dupes:
-        st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
+        st.dataframe(df_work[df_work.duplicated()], width='stretch')
 
 
 # ══════════════════════════════════════════════
@@ -992,32 +994,32 @@ with tabs[1]:
             if "Descriptive Statistics" in analyses:
                 st.markdown('<div class="section-header">Descriptive Statistics</div>', unsafe_allow_html=True)
                 st.dataframe(descriptive_stats(df_work, sel_num).style.format("{:.4f}"),
-                             use_container_width=True)
+                             width='stretch')
 
             if "Percentile Table" in analyses:
                 st.markdown('<div class="section-header">Percentile Table</div>', unsafe_allow_html=True)
                 st.dataframe(percentile_table(df_work, sel_num).style.format("{:.4f}"),
-                             use_container_width=True)
+                             width='stretch')
 
             if "Skewness & Kurtosis" in analyses:
                 st.markdown('<div class="section-header">Skewness & Kurtosis</div>', unsafe_allow_html=True)
-                st.dataframe(skewness_kurtosis(df_work, sel_num), use_container_width=True)
+                st.dataframe(skewness_kurtosis(df_work, sel_num), width='stretch')
 
             if "Normality Test (Shapiro-Wilk)" in analyses:
                 st.markdown('<div class="section-header">Normality Test</div>', unsafe_allow_html=True)
-                st.dataframe(normality_test(df_work, sel_num), use_container_width=True)
+                st.dataframe(normality_test(df_work, sel_num), width='stretch')
 
             if "Outlier Detection (IQR)" in analyses:
                 st.markdown('<div class="section-header">Outlier Detection — IQR</div>', unsafe_allow_html=True)
-                st.dataframe(outlier_iqr_table(df_work, sel_num), use_container_width=True)
+                st.dataframe(outlier_iqr_table(df_work, sel_num), width='stretch')
 
             if "Outlier Detection (Z-Score)" in analyses:
                 st.markdown('<div class="section-header">Outlier Detection — Z-Score</div>', unsafe_allow_html=True)
-                st.dataframe(outlier_zscore_table(df_work, sel_num), use_container_width=True)
+                st.dataframe(outlier_zscore_table(df_work, sel_num), width='stretch')
 
             if "Variance Analysis" in analyses:
                 st.markdown('<div class="section-header">Variance Analysis</div>', unsafe_allow_html=True)
-                st.dataframe(variance_table(df_work, sel_num), use_container_width=True)
+                st.dataframe(variance_table(df_work, sel_num), width='stretch')
 
 
 # ══════════════════════════════════════════════
@@ -1040,7 +1042,7 @@ with tabs[2]:
             vc = s.value_counts()
 
             if "Frequency Table" in cat_analyses:
-                st.dataframe(frequency_table(s), use_container_width=True)
+                st.dataframe(frequency_table(s), width='stretch')
 
             if "Cardinality" in cat_analyses:
                 n_u = s.nunique()
@@ -1119,17 +1121,17 @@ with tabs[3]:
 
             st.markdown('<div class="section-header">Correlation Matrix</div>', unsafe_allow_html=True)
             st.dataframe(corr_df.style.background_gradient(cmap=palette, axis=None).format("{:.3f}"),
-                         use_container_width=True)
+                         width='stretch')
 
             fig_c = px.imshow(corr_df, text_auto=".2f", color_continuous_scale=palette,
                               template=template, height=chart_h, width=chart_w,
                               title=f"{corr_method.capitalize()} Correlation Heatmap")
             fig_c.update_layout(font_size=font_sz)
-            st.plotly_chart(fig_c, use_container_width=True)
+            st.plotly_chart(fig_c, width='stretch')
 
             st.markdown('<div class="section-header">Top Correlations (Ranked)</div>', unsafe_allow_html=True)
             corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
-            st.dataframe(corr_pairs_df, use_container_width=True)
+            st.dataframe(corr_pairs_df, width='stretch')
 
             # ── Interpretation guide ──────────────────────────
             st.markdown("""
@@ -1253,7 +1255,7 @@ with tabs[4]:
                 xaxis_title=x_label, yaxis_title=y_label,
                 xaxis=dict(showgrid=show_grid), yaxis=dict(showgrid=show_grid),
             )
-            st.plotly_chart(fig_chart, use_container_width=True)
+            st.plotly_chart(fig_chart, width='stretch')
 
             fmt = st.selectbox("Export Chart As", ["png", "svg", "html"])
             if st.button("⬇️ Download Chart"):
@@ -1348,7 +1350,7 @@ with tabs[5]:
             skew_df.style.map(_colour_cls, subset=["Classification"]).format(
                 {"Skewness": "{:.4f}", "Mean": "{:.4f}", "Median": "{:.4f}", "Std": "{:.4f}"}
             ),
-            use_container_width=True, height=min(400, 60 + 35 * len(skew_rows)),
+            width='stretch', height=min(400, 60 + 35 * len(skew_rows)),
         )
 
         # ── B: Per-column distribution charts with skew annotation ──
@@ -1392,7 +1394,7 @@ with tabs[5]:
                             margin=dict(l=10, r=10, t=50, b=30),
                             paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc",
                         )
-                        st.plotly_chart(fig_h, use_container_width=True)
+                        st.plotly_chart(fig_h, width='stretch')
                     except Exception as e:
                         st.warning(f"Chart error for '{col}': {e}")
 
@@ -1461,7 +1463,7 @@ with tabs[5]:
                 st.dataframe(
                     pd.DataFrame({**before_stats, **preview}).T
                     .rename_axis("Transform").reset_index(),
-                    use_container_width=True,
+                    width='stretch',
                 )
 
                 # Side-by-side before/after charts
@@ -1476,7 +1478,7 @@ with tabs[5]:
                                         template=template, height=240, showlegend=False,
                                         margin=dict(l=5,r=5,t=45,b=20),
                                         paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc")
-                    st.plotly_chart(fig_b, use_container_width=True)
+                    st.plotly_chart(fig_b, width='stretch')
 
                 for i, t_name in enumerate(transforms_sel, 1):
                     if i < len(chart_cols):
@@ -1502,7 +1504,7 @@ with tabs[5]:
                                     margin=dict(l=5,r=5,t=45,b=20),
                                     paper_bgcolor="#ffffff", plot_bgcolor="#f8fafc",
                                 )
-                                st.plotly_chart(fig_a, use_container_width=True)
+                                st.plotly_chart(fig_a, width='stretch')
 
                 st.success("✅ Transformations previewed above.")
 
@@ -1606,7 +1608,7 @@ with tabs[6]:
             "Column":        miss_df.index,
             "Missing Count": miss_df.values,
             "Missing %":     (miss_df / len(df_clean_work) * 100).round(2).values,
-        }), use_container_width=True)
+        }), width='stretch')
 
         st.markdown("**Select imputation strategy per column:**")
         impute_actions = {}
@@ -1817,7 +1819,7 @@ with tabs[6]:
             # Live preview
             st.markdown("**Preview (first 30 rows):**")
             preview_enc = encoding_preview(df_work[enc_col], enc_col, enc_method)
-            st.dataframe(preview_enc.head(30), use_container_width=True)
+            st.dataframe(preview_enc.head(30), width='stretch')
 
             # Apply & Save button
             st.markdown("**Apply encoding to the working dataset:**")
@@ -1932,7 +1934,7 @@ with tabs[8]:
     g_col, b_col = st.columns([1, 1])
 
     with g_col:
-        st.plotly_chart(quality_gauge(qs_total), use_container_width=True)
+        st.plotly_chart(quality_gauge(qs_total), width='stretch')
 
     with b_col:
         st.markdown("&nbsp;")
