@@ -22,10 +22,15 @@ def load_file(uploaded_file):
     """
     Parse an uploaded CSV or Excel file.
     Returns a DataFrame for CSV, or (ExcelFile, sheet_names) for Excel.
+    Tries UTF-8 first, then falls back to latin-1 for CSVs with non-ASCII characters.
     """
     name = uploaded_file.name.lower()
     if name.endswith(".csv"):
-        return pd.read_csv(uploaded_file)
+        try:
+            return pd.read_csv(uploaded_file, encoding="utf-8")
+        except UnicodeDecodeError:
+            uploaded_file.seek(0)
+            return pd.read_csv(uploaded_file, encoding="latin-1")
     elif name.endswith((".xlsx", ".xls")):
         xl = pd.ExcelFile(uploaded_file)
         return xl, xl.sheet_names
@@ -633,10 +638,10 @@ def treat_outliers(df: pd.DataFrame, col: str,
 # ─────────────────────────────────────────────
 
 def apply_transforms(df: pd.DataFrame, col: str,
-                     transforms: list) -> tuple[pd.DataFrame, dict]:
+                     transforms: list) -> tuple[pd.DataFrame, dict, dict]:
     """
     Apply a list of named transforms to a column.
-    Returns (df_with_new_cols, preview_dict {label: describe_series}).
+    Returns (df_with_new_cols, preview_dict {label: describe_series}, errors_dict {transform: error_msg}).
     """
     from sklearn.preprocessing import (
         StandardScaler, MinMaxScaler, RobustScaler, PowerTransformer
@@ -729,6 +734,49 @@ def encoding_preview(s: pd.Series, col: str, method: str) -> pd.DataFrame:
         col: s,
         "Ordinal": encoded,
     })
+
+def apply_encoding(df: pd.DataFrame, col: str, method: str,
+                   ordinal_order: list | None = None) -> tuple[pd.DataFrame, str]:
+    """
+    Apply encoding to a column and return (new_df, log_message).
+    The original column is kept; encoded column(s) are added alongside it.
+    method: "Label Encoding" | "One-Hot Encoding" | "Frequency Encoding" | "Ordinal Encoding"
+    ordinal_order: explicit list of categories in ascending order (for Ordinal Encoding).
+    """
+    from sklearn.preprocessing import LabelEncoder, OrdinalEncoder
+
+    df = df.copy()
+    s  = df[col].fillna("Missing")
+
+    if method == "Label Encoding":
+        le = LabelEncoder()
+        df[f"{col}_label_enc"] = le.fit_transform(s.astype(str))
+        msg = f"Label Encoded '{col}' → '{col}_label_enc'"
+
+    elif method == "One-Hot Encoding":
+        ohe = pd.get_dummies(s, prefix=col).astype(int)
+        # drop original col, add new binary columns
+        df = df.drop(columns=[col])
+        for c in ohe.columns:
+            df[c] = ohe[c].values
+        msg = f"One-Hot Encoded '{col}' → {list(ohe.columns)}"
+
+    elif method == "Frequency Encoding":
+        freq_map = s.value_counts(normalize=True)
+        df[f"{col}_freq_enc"] = s.map(freq_map).round(4)
+        msg = f"Frequency Encoded '{col}' → '{col}_freq_enc'"
+
+    else:  # Ordinal Encoding
+        s_str = s.astype(str)
+        cats  = ordinal_order if ordinal_order else sorted(s_str.unique())
+        oe    = OrdinalEncoder(categories=[cats])
+        df[f"{col}_ordinal_enc"] = oe.fit_transform(
+            s_str.to_numpy().reshape(-1, 1)
+        ).flatten()
+        msg = f"Ordinal Encoded '{col}' → '{col}_ordinal_enc'"
+
+    return df, msg
+
 
 # ─────────────────────────────────────────────
 #  RECOMMENDATIONS ENGINE
@@ -863,7 +911,7 @@ def build_recommendations(df: pd.DataFrame,
         ("Detect & treat outliers (IQR / Z-score)",  all(all_stats.get(c, {}).get("outliers_iqr", 0) == 0 for c in num_cols)),
         ("Check skewness → transform if needed",     all(abs(all_stats.get(c, {}).get("skewness", 0)) < 1 for c in num_cols)),
         ("Verify normality (Q-Q plot, Shapiro-Wilk)", all(all_stats.get(c, {}).get("is_normal", True) for c in num_cols)),
-        ("Encode categorical columns",               False),
+        ("Encode categorical columns",               not bool(cat_cols)),
         ("Check correlation / multicollinearity",    True),
         ("Scale/normalise features",                 False),
         ("Check class balance (if classification)",  True),
