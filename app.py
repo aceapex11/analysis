@@ -228,119 +228,6 @@ code {
 }
 
 div.stAlert { border-radius: 10px !important; }
-
-/* ── Tab Navigation ── */
-.tab-nav-bar {
-    margin: 24px 0 28px 0;
-    padding: 16px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    box-shadow: var(--shadow);
-}
-.tab-nav-inner {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-}
-.tab-nav-prev {
-    flex: 1;
-    text-align: left;
-}
-.tab-nav-center {
-    text-align: center;
-    padding-top: 4px;
-    min-width: 120px;
-}
-.tab-nav-next {
-    flex: 1;
-    text-align: right;
-}
-.tab-nav-label {
-    font-size: 0.68rem;
-    color: #94a3b8;
-    text-transform: uppercase;
-    letter-spacing: 0.09em;
-    margin-bottom: 6px;
-}
-.tab-nav-btn-prev {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #f0f4ff;
-    border: 1.5px solid #6366f1;
-    border-radius: 10px;
-    padding: 9px 16px;
-    font-size: 0.84rem;
-    color: #3730a3;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-}
-.tab-nav-btn-next {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #f0fdf4;
-    border: 1.5px solid #16a34a;
-    border-radius: 10px;
-    padding: 9px 16px;
-    font-size: 0.84rem;
-    color: #15803d;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-}
-.tab-nav-btn-prev .tab-name,
-.tab-nav-btn-next .tab-name {
-    background: #e0e7ff;
-    color: #4338ca;
-    border-radius: 5px;
-    padding: 1px 7px;
-    font-size: 0.8rem;
-    font-family: 'JetBrains Mono', monospace;
-}
-.tab-nav-btn-next .tab-name {
-    background: #dcfce7;
-    color: #166534;
-}
-.tab-nav-dots {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 5px;
-    margin-bottom: 5px;
-}
-.dot {
-    display: inline-block;
-    border-radius: 50%;
-}
-.dot-active {
-    width: 10px;
-    height: 10px;
-    background: #6366f1;
-}
-.dot-inactive {
-    width: 6px;
-    height: 6px;
-    background: #cbd5e1;
-}
-.tab-nav-counter {
-    font-size: 0.72rem;
-    color: #94a3b8;
-    font-family: 'JetBrains Mono', monospace;
-}
-.tab-nav-tip {
-    margin-top: 12px;
-    padding: 8px 14px;
-    background: #fefce8;
-    border: 1px solid #fde68a;
-    border-radius: 8px;
-    font-size: 0.78rem;
-    color: #92400e;
-    text-align: center;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -707,65 +594,25 @@ TAB_NAMES = [
 ]
 
 
-def render_tab_nav(current_idx: int):
-    """
-    Renders a polished bottom navigation bar.
-    Shows: ← Previous tab name | progress dots + counter | Next tab name →
-    Since st.tabs() cannot be switched programmatically, we show clear
-    'scroll up and click' instructions with the exact tab name highlighted.
-    """
-    prev_idx = current_idx - 1
-    next_idx = current_idx + 1
-    has_prev = prev_idx >= 0
-    has_next = next_idx < len(TAB_NAMES)
-
-    # Build progress dots HTML
-    dots_html = ""
-    for i in range(len(TAB_NAMES)):
-        if i == current_idx:
-            dots_html += '<span class="dot dot-active" title="' + TAB_NAMES[i] + '"></span>'
-        else:
-            dots_html += '<span class="dot dot-inactive" title="' + TAB_NAMES[i] + '"></span>'
-
-    # Build prev button HTML
-    if has_prev:
-        prev_html = f"""
-        <div class="tab-nav-prev">
-            <div class="tab-nav-label">&#8592; Previous tab</div>
-            <div class="tab-nav-btn-prev">
-                <span>&#9664;</span>
-                <span>Scroll up &amp; click <span class="tab-name">{TAB_NAMES[prev_idx]}</span></span>
-            </div>
-        </div>"""
-    else:
-        prev_html = '<div class="tab-nav-prev"></div>'
-
-    # Build next button HTML
-    if has_next:
-        next_html = f"""
-        <div class="tab-nav-next">
-            <div class="tab-nav-label" style="text-align:right;">Next tab &#8594;</div>
-            <div class="tab-nav-btn-next" style="justify-content:flex-end;">
-                <span>Scroll up &amp; click <span class="tab-name">{TAB_NAMES[next_idx]}</span></span>
-                <span>&#9654;</span>
-            </div>
-        </div>"""
-    else:
-        next_html = '<div class="tab-nav-next"></div>'
-
+def _tab_progress(current_idx: int):
+    """Render a slim, honest progress strip — no fake navigation buttons."""
+    pct  = round((current_idx + 1) / len(TAB_NAMES) * 100)
+    name = TAB_NAMES[current_idx]
     st.markdown(f"""
-    <div class="tab-nav-bar">
-        <div class="tab-nav-inner">
-            {prev_html}
-            <div class="tab-nav-center">
-                <div class="tab-nav-dots">{dots_html}</div>
-                <div class="tab-nav-counter">{current_idx + 1}&nbsp;/&nbsp;{len(TAB_NAMES)}</div>
-            </div>
-            {next_html}
+    <div style="margin:28px 0 8px 0;padding:10px 16px;background:#f8fafc;
+                border:1px solid #e2e8f0;border-radius:10px;
+                display:flex;align-items:center;gap:16px;">
+        <span style="font-size:0.75rem;color:#64748b;white-space:nowrap;
+                     font-family:'JetBrains Mono',monospace;font-weight:600;">
+            {current_idx + 1}&nbsp;/&nbsp;{len(TAB_NAMES)}
+        </span>
+        <div style="flex:1;background:#e2e8f0;border-radius:6px;height:6px;">
+            <div style="width:{pct}%;height:100%;background:#6366f1;
+                        border-radius:6px;transition:width 0.3s ease;"></div>
         </div>
-        <div class="tab-nav-tip">
-            💡 <b>Tip:</b> The tab bar is at the top of the page — scroll up and click the highlighted tab name to navigate.
-        </div>
+        <span style="font-size:0.75rem;color:#6366f1;font-weight:600;white-space:nowrap;">
+            {name}
+        </span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -1148,7 +995,7 @@ with tabs[0]:
     if dupes:
         st.dataframe(df_work[df_work.duplicated()], use_container_width=True)
 
-    render_tab_nav(0)
+    _tab_progress(0)
 
 
 # ══════════════════════════════════════════════
@@ -1197,7 +1044,7 @@ with tabs[1]:
                 st.markdown('<div class="section-header">Variance Analysis</div>', unsafe_allow_html=True)
                 st.dataframe(variance_table(df_work, sel_num), use_container_width=True)
 
-        render_tab_nav(1)
+    _tab_progress(1)
 
 
 # ══════════════════════════════════════════════
@@ -1249,7 +1096,7 @@ with tabs[2]:
                 st.metric(f"Shannon Entropy ('{col}')", f"{ent:.4f} bits",
                           delta=f"Max possible: {max_ent:.2f} bits")
 
-        render_tab_nav(2)
+    _tab_progress(2)
 
 
 # ══════════════════════════════════════════════
@@ -1325,7 +1172,7 @@ with tabs[3]:
             </div>
             """, unsafe_allow_html=True)
 
-        render_tab_nav(3)
+    _tab_progress(3)
 
 
 # ══════════════════════════════════════════════
@@ -1452,7 +1299,7 @@ with tabs[4]:
     except Exception as e:
         st.error(f"Chart error: {e}")
 
-    render_tab_nav(4)
+    _tab_progress(4)
 
 
 # ══════════════════════════════════════════════
@@ -1710,7 +1557,7 @@ with tabs[5]:
                                f"Dataset now has {df_save.shape[1]} columns.")
                 st.rerun()
 
-        render_tab_nav(5)
+    _tab_progress(5)
 
 
 # ══════════════════════════════════════════════
@@ -2029,7 +1876,7 @@ with tabs[6]:
         st.download_button("⬇️ Download ml_ready.pkl", pkl_buf,
             file_name="ml_ready.pkl", mime="application/octet-stream")
 
-    render_tab_nav(6)
+    _tab_progress(6)
 
 
 # ══════════════════════════════════════════════
@@ -2210,7 +2057,7 @@ with tabs[7]:
                     unsafe_allow_html=True)
         st.dataframe(st.session_state.df_clean[keep].tail(20), use_container_width=True)
 
-        render_tab_nav(7)
+    _tab_progress(7)
 
 
 # ══════════════════════════════════════════════
@@ -2241,7 +2088,7 @@ with tabs[8]:
         st.download_button("⬇️ Summary Stats (CSV)", summary.to_csv(),
             file_name="summary_stats.csv", mime="text/csv")
 
-    render_tab_nav(8)
+    _tab_progress(8)
 
 
 # ══════════════════════════════════════════════
@@ -2464,4 +2311,4 @@ with tabs[9]:
             unsafe_allow_html=True,
         )
 
-    render_tab_nav(9)
+    _tab_progress(9)
