@@ -584,6 +584,7 @@ if "df_clean_history" not in st.session_state:
 # ── Tab metadata ──────────────────────────────────────────────────────────────
 TAB_NAMES = [
     "🗂 Overview",
+    "💡 Recommendations",
     "🔢 Numerical",
     "🏷️ Categorical",
     "📐 Correlation",
@@ -592,7 +593,6 @@ TAB_NAMES = [
     "🧹 Data Cleaning",
     "➕ Add Data",
     "💾 Export",
-    "💡 Recommendations",
 ]
 
 
@@ -982,7 +982,7 @@ with tabs[0]:
 # ══════════════════════════════════════════════
 #  TAB 2 — NUMERICAL
 # ══════════════════════════════════════════════
-with tabs[1]:
+with tabs[2]:
     if not num_cols:
         st.warning("No numeric columns detected.")
     else:
@@ -1030,7 +1030,7 @@ with tabs[1]:
 # ══════════════════════════════════════════════
 #  TAB 3 — CATEGORICAL
 # ══════════════════════════════════════════════
-with tabs[2]:
+with tabs[3]:
     if not cat_cols:
         st.warning("No categorical columns detected.")
     else:
@@ -1081,7 +1081,7 @@ with tabs[2]:
 # ══════════════════════════════════════════════
 #  TAB 4 — CORRELATION
 # ══════════════════════════════════════════════
-with tabs[3]:
+with tabs[4]:
     if len(num_cols) < 2:
         st.warning("Need at least 2 numeric columns for correlation.")
     else:
@@ -1160,7 +1160,7 @@ with tabs[3]:
 # ══════════════════════════════════════════════
 #  TAB 5 — CHARTS
 # ══════════════════════════════════════════════
-with tabs[4]:
+with tabs[5]:
     chart_type = st.selectbox("Chart Type", [
         "Histogram", "KDE / Density", "Box Plot", "Violin Plot",
         "Scatter Plot", "Bar Chart", "Pie / Donut Chart",
@@ -1217,11 +1217,13 @@ with tabs[4]:
                 template=template, height=chart_h, title=chart_title)
 
         elif chart_type == "Line Chart" and y_arg:
-            fig_chart = px.line(df_work, x=col_x, y=y_arg, color=color_arg,
+            df_line = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).sort_values(col_x)
+            fig_chart = px.line(df_line, x=col_x, y=y_arg, color=color_arg,
                 template=template, height=chart_h, title=chart_title)
 
         elif chart_type == "Area Chart" and y_arg:
-            fig_chart = px.area(df_work, x=col_x, y=y_arg, color=color_arg,
+            df_area = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).sort_values(col_x)
+            fig_chart = px.area(df_area, x=col_x, y=y_arg, color=color_arg,
                 template=template, height=chart_h, title=chart_title)
 
         elif chart_type == "ECDF Plot":
@@ -1286,7 +1288,7 @@ with tabs[4]:
 # ══════════════════════════════════════════════
 #  TAB 6 — TRANSFORM
 # ══════════════════════════════════════════════
-with tabs[5]:
+with tabs[6]:
     st.markdown("### 🔄 Skewness Analysis & Transformations")
     st.caption("Identify distribution shape for every numeric column, then apply the right transformation to fix it.")
 
@@ -1553,7 +1555,7 @@ with tabs[5]:
 # ══════════════════════════════════════════════
 #  TAB 7 — DATA CLEANING
 # ══════════════════════════════════════════════
-with tabs[6]:
+with tabs[7]:
     st.markdown("### 🧹 Data Cleaning Operations")
     st.caption("All operations modify the working dataset and are logged below.")
 
@@ -1584,8 +1586,9 @@ with tabs[6]:
     # Calculate duplicate count based on current selection
     subset_arg = dup_subset if dup_subset else None
 
-    dup_count = int(
-    df_clean_work.duplicated(subset=subset_arg).sum()
+    dup_count = duplicate_rows(
+        df_clean_work,
+        subset=subset_arg
     )
 
     with col_b:
@@ -1919,7 +1922,7 @@ with tabs[6]:
 # ══════════════════════════════════════════════
 #  TAB 7 — ADD DATA
 # ══════════════════════════════════════════════
-with tabs[7]:
+with tabs[8]:
     st.markdown("### ➕ Add Data to Dataset")
     st.caption("Manually add new rows to your working dataset. Changes are saved to the cleaned dataset and reflected across all tabs.")
 
@@ -2110,7 +2113,7 @@ with tabs[7]:
 # ══════════════════════════════════════════════
 #  TAB 8 — EXPORT  (was TAB 8, now shifted)
 # ══════════════════════════════════════════════
-with tabs[8]:
+with tabs[9]:
     st.markdown('<div class="section-header">Export Data</div>', unsafe_allow_html=True)
 
     export_choice = st.radio("Export Which Dataset?",
@@ -2140,7 +2143,7 @@ with tabs[8]:
 # ══════════════════════════════════════════════
 #  TAB 9 — RECOMMENDATIONS  (fully rebuilt)
 # ══════════════════════════════════════════════
-with tabs[9]:
+with tabs[1]:
     st.markdown("### 💡 Automated Data Recommendations")
     st.caption("Scans your dataset and gives step-by-step, actionable guidance with exact Python code.")
 
