@@ -1109,26 +1109,26 @@ with tabs[4]:
             <div style="display:flex;align-items:center;gap:0;border-radius:8px;overflow:hidden;height:28px;">
                 <div style="flex:1;background:#16a34a;display:flex;align-items:center;
                             justify-content:center;font-size:0.72rem;font-weight:700;color:#fff;">
-                    p ≤ 0.01 (High)
+                    p ≤ 0.01 ✦✦✦
                 </div>
                 <div style="flex:1;background:#4ade80;display:flex;align-items:center;
                             justify-content:center;font-size:0.72rem;font-weight:700;color:#14532d;">
-                    p ≤ 0.05 (Moderate)
+                    p ≤ 0.05 ✦✦
                 </div>
                 <div style="flex:1;background:#fde68a;display:flex;align-items:center;
                             justify-content:center;font-size:0.72rem;font-weight:700;color:#92400e;">
-                    p ≤ 0.10 (Low)
+                    p ≤ 0.10 ✦
                 </div>
                 <div style="flex:1;background:#fca5a5;display:flex;align-items:center;
                             justify-content:center;font-size:0.72rem;font-weight:700;color:#991b1b;">
-                    p &gt; 0.10 (None)
+                    p &gt; 0.10 ✗
                 </div>
             </div>
             <div style="display:flex;gap:20px;margin-top:8px;font-size:0.78rem;color:#64748b;flex-wrap:wrap;">
-                <span><b style="color:#16a34a;">p ≤ 0.01</b> — Highly significant, very strong evidence</span>
-                <span><b style="color:#16a34a;">p ≤ 0.05</b> — Significant, standard threshold</span>
-                <span><b style="color:#d97706;">p ≤ 0.10</b> — Marginally significant, weak evidence</span>
-                <span><b style="color:#dc2626;">p &gt; 0.10</b> — Not significant, likely random</span>
+                <span><b style="color:#16a34a;">✦✦✦ p≤0.01</b> — Highly significant, very strong evidence</span>
+                <span><b style="color:#16a34a;">✦✦ p≤0.05</b> — Significant, standard threshold</span>
+                <span><b style="color:#d97706;">✦ p≤0.10</b> — Marginally significant, weak evidence</span>
+                <span><b style="color:#dc2626;">✗ p&gt;0.10</b> — Not significant, likely random</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -1181,10 +1181,10 @@ with tabs[4]:
             corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
 
             def _sig_stars(p):
-                if p <= 0.01:  return "p ≤ 0.01 (High)"
-                if p <= 0.05:  return "p ≤ 0.05 (Moderate)"
-                if p <= 0.10:  return "p ≤ 0.10 (Low)"
-                return "Not significant"
+                if p <= 0.01:  return "✦✦✦"
+                if p <= 0.05:  return "✦✦"
+                if p <= 0.10:  return "✦"
+                return "✗"
 
             def _strength_label(r):
                 a = abs(r)
@@ -1200,10 +1200,10 @@ with tabs[4]:
 
             if not corr_pairs_df.empty:
                 display_df = corr_pairs_df.copy()
-                display_df["Significance"] = display_df["p-value"].apply(_sig_stars)
+                display_df["Stars"]     = display_df["p-value"].apply(_sig_stars)
                 display_df["Strength"]  = display_df["Correlation"].apply(_strength_label)
                 display_df["Direction"] = display_df["Correlation"].apply(_direction)
-                display_df = display_df[["Col A","Col B","Correlation","p-value","Significance","Significant","Strength","Direction"]]
+                display_df = display_df[["Col A","Col B","Correlation","p-value","Stars","Significant","Strength","Direction"]]
 
                 def _color_corr(val):
                     try:
@@ -1218,16 +1218,16 @@ with tabs[4]:
                         return f"background-color:{bg};color:{fg};font-weight:700;font-family:monospace"
                     except: return ""
 
-                def _color_significance(val):
-                    if "High" in str(val):     return "background-color:#dcfce7;color:#15803d;font-weight:700"
-                    if "Moderate" in str(val): return "background-color:#bbf7d0;color:#166534;font-weight:700"
-                    if "Low" in str(val):      return "background-color:#fef9c3;color:#92400e;font-weight:600"
+                def _color_stars(val):
+                    if val == "✦✦✦": return "background-color:#dcfce7;color:#15803d;font-weight:700"
+                    if val == "✦✦":  return "background-color:#bbf7d0;color:#166534;font-weight:700"
+                    if val == "✦":   return "background-color:#fef9c3;color:#92400e;font-weight:600"
                     return "background-color:#fecaca;color:#991b1b;font-weight:600"
 
                 st.dataframe(
                     display_df.style
                         .map(_color_corr, subset=["Correlation"])
-                        .map(_color_significance, subset=["Significance"]),
+                        .map(_color_stars, subset=["Stars"]),
                     use_container_width=True, height=380
                 )
 
@@ -1258,7 +1258,7 @@ with tabs[4]:
                 "Correlation": focus_series.values.round(4),
                 "p-value":     [focus_pvals.get(c, 1.0) for c in focus_series.index],
             })
-            focus_df["Significance"] = focus_df["p-value"].apply(_sig_stars)
+            focus_df["Stars"]     = focus_df["p-value"].apply(_sig_stars)
             focus_df["Strength"]  = focus_df["Correlation"].apply(_strength_label)
             focus_df["Direction"] = focus_df["Correlation"].apply(_direction)
 
@@ -1281,7 +1281,7 @@ with tabs[4]:
                 textposition="outside",
                 customdata=np.stack([
                     focus_df["p-value"].values,
-                    focus_df["Significance"].values,
+                    focus_df["Stars"].values,
                     focus_df["Strength"].values,
                 ], axis=-1),
                 hovertemplate=(
@@ -1314,7 +1314,7 @@ with tabs[4]:
             st.dataframe(
                 focus_df.style
                     .map(_color_corr, subset=["Correlation"])
-                    .map(_color_significance, subset=["Significance"]),
+                    .map(_color_stars, subset=["Stars"]),
                 use_container_width=True,
             )
 
@@ -1486,118 +1486,65 @@ with tabs[5]:
             fig_chart = px.pie(vc, names="label", values="count", hole=0.4,
                 template=template, height=chart_h, title=chart_title)
 
-       elif chart_type == "Line Chart" and y_arg:
+        elif chart_type == "Line Chart" and y_arg:
+            # Aggregate: if X is datetime or has many repeated values, group by X and sum/mean Y
+            df_line_raw = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
+            # Try to convert X to datetime for proper sorting
+            x_is_date = pd.api.types.is_datetime64_any_dtype(df_line_raw[col_x])
+            if not x_is_date:
+                try:
+                    df_line_raw[col_x] = pd.to_datetime(df_line_raw[col_x])
+                    x_is_date = True
+                except Exception:
+                    pass
 
-        df_line_raw = (
-            df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])]
-            .dropna(subset=[col_x, y_arg])
-            .copy()
-        )
+            agg_options = ["None (raw, sorted)", "Sum", "Mean", "Median", "Count"]
+            line_agg = st.selectbox("Aggregate Y by X?", agg_options, index=1 if x_is_date else 0, key="line_agg")
 
-        agg_options = ["Sum", "Mean", "Median", "Count", "None (raw data)"]
-
-        line_agg = st.selectbox(
-            "Aggregation",
-            agg_options,
-            index=0,
-            key="line_agg"
-        )
-
-        if line_agg != "None (raw data)":
-
-            agg_fn = {
-                "Sum": "sum",
-                "Mean": "mean",
-                "Median": "median",
-                "Count": "count"
-            }[line_agg]
-
-            if color_arg:
-                df_line = (
-                    df_line_raw
-                    .groupby([col_x, color_arg])[y_arg]
-                    .agg(agg_fn)
-                    .reset_index()
-                )
+            if line_agg != "None (raw, sorted)":
+                agg_fn = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[line_agg]
+                if color_arg:
+                    df_line = df_line_raw.groupby([col_x, color_arg], sort=True)[y_arg].agg(agg_fn).reset_index()
+                else:
+                    df_line = df_line_raw.groupby(col_x, sort=True)[y_arg].agg(agg_fn).reset_index()
             else:
-                df_line = (
-                    df_line_raw
-                    .groupby(col_x)[y_arg]
-                    .agg(agg_fn)
-                    .reset_index()
-                )
+                df_line = df_line_raw.sort_values(col_x)
 
-            y_label = f"{line_agg} of {y_arg}"
+            fig_chart = px.line(
+                df_line, x=col_x, y=y_arg, color=color_arg,
+                markers=True,
+                template=template, height=chart_h, title=chart_title,
+            )
+            fig_chart.update_traces(
+                marker=dict(size=7, line=dict(width=1.5, color="white")),
+                line=dict(width=2.2),
+            )
 
-        else:
-            df_line = df_line_raw.sort_values(col_x)
-            y_label = y_arg
-
-        fig_chart = px.line(
-            df_line,
-            x=col_x,
-            y=y_arg,
-            color=color_arg,
-            markers=True,
-            template=template,
-            height=chart_h,
-            title=chart_title,
-            labels={y_arg: y_label}
-        )
-
-        fig_chart.update_traces(
-            marker=dict(size=7),
-            line=dict(width=2)
-        )
         elif chart_type == "Area Chart" and y_arg:
-
-        df_area_raw = (
-            df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])]
-            .dropna(subset=[col_x, y_arg])
-            .copy()
-        )
-
-        agg_options = ["Sum", "Mean", "Median", "Count"]
-
-        area_agg = st.selectbox(
-            "Aggregation",
-            agg_options,
-            index=0,
-            key="area_agg"
-        )
-
-        agg_fn = {
-            "Sum": "sum",
-            "Mean": "mean",
-            "Median": "median",
-            "Count": "count"
-        }[area_agg]
-
-        if color_arg:
-            df_area = (
-                df_area_raw
-                .groupby([col_x, color_arg])[y_arg]
-                .agg(agg_fn)
-                .reset_index()
-            )
-        else:
-            df_area = (
-                df_area_raw
-                .groupby(col_x)[y_arg]
-                .agg(agg_fn)
-                .reset_index()
-            )
-
-        fig_chart = px.area(
-            df_area,
-            x=col_x,
-            y=y_arg,
-            color=color_arg,
-            template=template,
-            height=chart_h,
-            title=chart_title,
-            labels={y_arg: f"{area_agg} of {y_arg}"}
-        )
+            df_area_raw = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
+            n_rows_a = len(df_area_raw)
+            n_unique_a = df_area_raw[col_x].nunique()
+            if n_rows_a > n_unique_a * 1.5:
+                st.info(
+                    f"**Aggregation applied automatically.** "
+                    f"{n_rows_a:,} rows but only {n_unique_a:,} unique X values — values are summed per X point."
+                )
+            area_agg_options = ["Sum", "Mean", "Median", "Count", "None (raw data, sorted)"]
+            area_agg = st.selectbox("Aggregate Y by X?", area_agg_options,
+                                    index=0 if n_rows_a > n_unique_a * 1.5 else 4, key="area_agg")
+            if area_agg != "None (raw data, sorted)":
+                agg_fn_a = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[area_agg]
+                if color_arg:
+                    df_area = df_area_raw.groupby([col_x, color_arg], sort=True)[y_arg].agg(agg_fn_a).reset_index()
+                else:
+                    df_area = df_area_raw.groupby(col_x, sort=True)[y_arg].agg(agg_fn_a).reset_index()
+                area_y_label = f"{area_agg} of {y_arg}"
+            else:
+                df_area = df_area_raw.sort_values(col_x)
+                area_y_label = y_arg
+            fig_chart = px.area(df_area, x=col_x, y=y_arg, color=color_arg,
+                template=template, height=chart_h, title=chart_title,
+                labels={y_arg: area_y_label})
 
         elif chart_type == "ECDF Plot":
             sorted_vals = np.sort(df_work[col_x].dropna())
