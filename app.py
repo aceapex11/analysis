@@ -1584,9 +1584,8 @@ with tabs[6]:
     # Calculate duplicate count based on current selection
     subset_arg = dup_subset if dup_subset else None
 
-    dup_count = duplicate_rows(
-        df_clean_work,
-        subset=subset_arg
+    dup_count = int(
+    df_clean_work.duplicated(subset=subset_arg).sum()
     )
 
     with col_b:
