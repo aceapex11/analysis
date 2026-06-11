@@ -1226,8 +1226,8 @@ with tabs[4]:
 
                 st.dataframe(
                     display_df.style
-                        .applymap(_color_corr, subset=["Correlation"])
-                        .applymap(_color_stars, subset=["Stars"]),
+                        .map(_color_corr, subset=["Correlation"])
+                        .map(_color_stars, subset=["Stars"]),
                     use_container_width=True, height=380
                 )
 
@@ -1313,8 +1313,8 @@ with tabs[4]:
 
             st.dataframe(
                 focus_df.style
-                    .applymap(_color_corr, subset=["Correlation"])
-                    .applymap(_color_stars, subset=["Stars"]),
+                    .map(_color_corr, subset=["Correlation"])
+                    .map(_color_stars, subset=["Stars"]),
                 use_container_width=True,
             )
 
@@ -1377,7 +1377,7 @@ with tabs[4]:
                         except: return ""
 
                     st.dataframe(
-                        vif_df.style.applymap(_color_vif, subset=["VIF"]),
+                        vif_df.style.map(_color_vif, subset=["VIF"]),
                         use_container_width=True,
                     )
 
