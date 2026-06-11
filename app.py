@@ -1486,61 +1486,118 @@ with tabs[5]:
             fig_chart = px.pie(vc, names="label", values="count", hole=0.4,
                 template=template, height=chart_h, title=chart_title)
 
-        elif chart_type == "Line Chart" and y_arg:
-            df_line_raw = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
+       elif chart_type == "Line Chart" and y_arg:
 
-            # Detect if X is datetime
-            x_is_date = pd.api.types.is_datetime64_any_dtype(df_line_raw[col_x])
-            if not x_is_date:
-                try:
-                    df_line_raw[col_x] = pd.to_datetime(df_line_raw[col_x])
-                    x_is_date = True
-                except Exception:
-                    pass
+        df_line_raw = (
+            df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])]
+            .dropna(subset=[col_x, y_arg])
+            .copy()
+        )
 
-            # Detect transactional data: many rows with the same X value = needs aggregation
-            n_rows = len(df_line_raw)
-            n_unique_x = df_line_raw[col_x].nunique()
-            is_transactional = n_rows > n_unique_x * 1.5  # more rows than unique X = duplicates
+        agg_options = ["Sum", "Mean", "Median", "Count", "None (raw data)"]
 
-            if is_transactional:
-                st.info(
-                    f"**Aggregation applied automatically.** "
-                    f"Your data has {n_rows:,} rows but only {n_unique_x:,} unique X values — "
-                    f"connecting every row with a line would produce a meaningless spaghetti chart. "
-                    f"Values are summed per X point below. Change the aggregation method if needed."
+        line_agg = st.selectbox(
+            "Aggregation",
+            agg_options,
+            index=0,
+            key="line_agg"
+        )
+
+        if line_agg != "None (raw data)":
+
+            agg_fn = {
+                "Sum": "sum",
+                "Mean": "mean",
+                "Median": "median",
+                "Count": "count"
+            }[line_agg]
+
+            if color_arg:
+                df_line = (
+                    df_line_raw
+                    .groupby([col_x, color_arg])[y_arg]
+                    .agg(agg_fn)
+                    .reset_index()
+                )
+            else:
+                df_line = (
+                    df_line_raw
+                    .groupby(col_x)[y_arg]
+                    .agg(agg_fn)
+                    .reset_index()
                 )
 
-            agg_options = ["Sum", "Mean", "Median", "Count", "None (raw data, sorted)"]
-            default_agg_idx = 0 if is_transactional or x_is_date else 4
-            line_agg = st.selectbox("Aggregate Y by X?", agg_options, index=default_agg_idx, key="line_agg")
+            y_label = f"{line_agg} of {y_arg}"
 
-            if line_agg != "None (raw data, sorted)":
-                agg_fn = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[line_agg]
-                if color_arg:
-                    df_line = df_line_raw.groupby([col_x, color_arg], sort=True)[y_arg].agg(agg_fn).reset_index()
-                else:
-                    df_line = df_line_raw.groupby(col_x, sort=True)[y_arg].agg(agg_fn).reset_index()
-                agg_label = f"{line_agg} of {y_arg}"
-            else:
-                df_line = df_line_raw.sort_values(col_x)
-                agg_label = y_arg
+        else:
+            df_line = df_line_raw.sort_values(col_x)
+            y_label = y_arg
 
-            fig_chart = px.line(
-                df_line, x=col_x, y=y_arg, color=color_arg,
-                markers=True,
-                template=template, height=chart_h, title=chart_title,
-                labels={y_arg: agg_label},
-            )
-            fig_chart.update_traces(
-                marker=dict(size=7, line=dict(width=1.5, color="white")),
-                line=dict(width=2.2),
-            )
+        fig_chart = px.line(
+            df_line,
+            x=col_x,
+            y=y_arg,
+            color=color_arg,
+            markers=True,
+            template=template,
+            height=chart_h,
+            title=chart_title,
+            labels={y_arg: y_label}
+        )
 
+        fig_chart.update_traces(
+            marker=dict(size=7),
+            line=dict(width=2)
+        )
         elif chart_type == "Area Chart" and y_arg:
-            df_area = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).sort_values(col_x)
-            fig_chart = px.area(df_area, x=col_x, y=y_arg, color=color_arg,
-                template=template, height=chart_h, title=chart_title)
+
+        df_area_raw = (
+            df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])]
+            .dropna(subset=[col_x, y_arg])
+            .copy()
+        )
+
+        agg_options = ["Sum", "Mean", "Median", "Count"]
+
+        area_agg = st.selectbox(
+            "Aggregation",
+            agg_options,
+            index=0,
+            key="area_agg"
+        )
+
+        agg_fn = {
+            "Sum": "sum",
+            "Mean": "mean",
+            "Median": "median",
+            "Count": "count"
+        }[area_agg]
+
+        if color_arg:
+            df_area = (
+                df_area_raw
+                .groupby([col_x, color_arg])[y_arg]
+                .agg(agg_fn)
+                .reset_index()
+            )
+        else:
+            df_area = (
+                df_area_raw
+                .groupby(col_x)[y_arg]
+                .agg(agg_fn)
+                .reset_index()
+            )
+
+        fig_chart = px.area(
+            df_area,
+            x=col_x,
+            y=y_arg,
+            color=color_arg,
+            template=template,
+            height=chart_h,
+            title=chart_title,
+            labels={y_arg: f"{area_agg} of {y_arg}"}
+        )
 
         elif chart_type == "ECDF Plot":
             sorted_vals = np.sort(df_work[col_x].dropna())
