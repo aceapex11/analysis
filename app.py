@@ -1550,7 +1550,6 @@ with tabs[5]:
                 st.rerun()
 
 
-
 # ══════════════════════════════════════════════
 #  TAB 7 — DATA CLEANING
 # ══════════════════════════════════════════════
@@ -1562,35 +1561,80 @@ with tabs[6]:
     num_c, cat_c, _, _ = detect_col_types(df_clean_work)
 
     # ── A: Duplicate Removal ──────────────────────────────────
-    st.markdown('<div class="section-header">🔁 Duplicate Row Removal</div>', unsafe_allow_html=True)
-    dup_count = duplicate_rows(df_clean_work)
+    st.markdown(
+        '<div class="section-header">🔁 Duplicate Row Removal</div>',
+        unsafe_allow_html=True
+    )
+
     col_a, col_b = st.columns([2, 1])
+
     with col_a:
         dup_subset = st.multiselect(
             "Check duplicates based on columns (leave empty = all columns)",
-            df_clean_work.columns.tolist(), key="dup_subset",
+            df_clean_work.columns.tolist(),
+            key="dup_subset",
         )
-        dup_keep = st.selectbox("Which duplicate to keep?",
-            ["first", "last", "none (drop all)"], key="dup_keep")
+
+        dup_keep = st.selectbox(
+            "Which duplicate to keep?",
+            ["first", "last", "none (drop all)"],
+            key="dup_keep"
+        )
+
+    # Calculate duplicate count based on current selection
+    subset_arg = dup_subset if dup_subset else None
+
+    dup_count = duplicate_rows(
+        df_clean_work,
+        subset=subset_arg
+    )
+
     with col_b:
         badge_cls = "badge-danger" if dup_count > 0 else "badge-ok"
-        st.markdown(f"""
-        <div style="margin-top:10px;">
-            <div style="font-size:0.75rem;color:#64748b;margin-bottom:6px;">Duplicate Rows</div>
-            <span class="badge {badge_cls}">{dup_count} {'found ⚠️' if dup_count else 'none ✅'}</span>
-        </div>
-        """, unsafe_allow_html=True)
 
-    if st.button("🗑️ Remove Duplicates", disabled=(dup_count == 0), key="btn_dup"):
+        st.markdown(
+            f"""
+            <div style="margin-top:10px;">
+                <div style="font-size:0.75rem;color:#64748b;margin-bottom:6px;">
+                    Duplicate Rows
+                </div>
+                <span class="badge {badge_cls}">
+                    {dup_count} {'found ⚠️' if dup_count else 'none ✅'}
+                </span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    if st.button(
+        "🗑️ Remove Duplicates",
+        disabled=(dup_count == 0),
+        key="btn_dup"
+    ):
         _save_snapshot()
-        subset_arg = dup_subset if dup_subset else None
-        keep_arg   = False if "none" in dup_keep else dup_keep
-        df_new, removed = remove_duplicates(st.session_state.df_clean,
-                                            subset=subset_arg, keep=keep_arg)
+
+        keep_arg = {
+            "first": "first",
+            "last": "last",
+            "none (drop all)": False,
+        }[dup_keep]
+
+        df_new, removed = remove_duplicates(
+            st.session_state.df_clean,
+            subset=subset_arg,
+            keep=keep_arg,
+        )
+
         st.session_state.df_clean = df_new
+
         st.session_state.clean_log.append(
-            f"✅ Removed {removed} duplicate rows (keep='{dup_keep}')")
-        st.success(f"Removed {removed} rows. Dataset now has {len(df_new):,} rows.")
+            f"✅ Removed {removed} duplicate rows (keep='{dup_keep}')"
+        )
+
+        st.success(
+            f"Removed {removed} rows. Dataset now has {len(df_new):,} rows."
+        )
+
         st.rerun()
 
     st.divider()
