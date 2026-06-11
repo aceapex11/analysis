@@ -190,9 +190,9 @@ def missing_summary(df: pd.DataFrame) -> pd.Series:
     return miss[miss > 0].sort_values(ascending=False)
 
 
-def duplicate_rows(df: pd.DataFrame) -> int:
-    """Return the count of fully-duplicate rows."""
-    return int(df.duplicated().sum())
+def duplicate_rows(df: pd.DataFrame, subset=None) -> int:
+    """Return the count of fully-duplicate rows (or subset-duplicate rows)."""
+    return int(df.duplicated(subset=subset).sum())
 
 
 # ─────────────────────────────────────────────
