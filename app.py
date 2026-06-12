@@ -1352,15 +1352,27 @@ with tabs[4]:
             # ── Decode r: What to Keep / What to Remove ──────────
             st.markdown('<div class="section-header">🧹 Decode r — What to Keep / What to Remove</div>',
                         unsafe_allow_html=True)
-            st.markdown("""
+            st.caption("Set your own |r| thresholds below — the recommendations and table update to match your situation.")
+
+            thr_col1, thr_col2, thr_col3 = st.columns(3)
+            with thr_col1:
+                thr_drop = st.slider("🔴 Drop threshold — |r| ≥", 0.50, 1.00, 0.90, 0.01, key="thr_drop",
+                                      help="Pairs at or above this |r| are flagged as near-duplicates — drop one.")
+            with thr_col2:
+                thr_review = st.slider("🟠 Review threshold — |r| ≥", 0.30, thr_drop, 0.70, 0.01, key="thr_review",
+                                        help="Pairs between this and the drop threshold are flagged for review.")
+            with thr_col3:
+                thr_watch = st.slider("🟡 Watch threshold — |r| ≥", 0.10, thr_review, 0.50, 0.01, key="thr_watch",
+                                       help="Pairs between this and the review threshold are flagged to monitor.")
+
+            st.markdown(f"""
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
-                        padding:14px 16px;margin:0 0 14px 0;font-size:0.84rem;color:#334155;">
-                <b>How to read |r|:</b><br>
-                <span style="color:#7f1d1d;font-weight:700;">|r| ≥ 0.90</span> — Near-duplicate columns. One is redundant — drop it unless both are needed for context.<br>
-                <span style="color:#dc2626;font-weight:700;">0.70 ≤ |r| &lt; 0.90</span> — Strongly related. Keep only if both add distinct meaning to your model/analysis; otherwise drop the less interpretable one.<br>
-                <span style="color:#d97706;font-weight:700;">0.50 ≤ |r| &lt; 0.70</span> — Moderately related. Usually safe to keep both — monitor with VIF if used in a linear model.<br>
-                <span style="color:#6366f1;font-weight:700;">0.30 ≤ |r| &lt; 0.50</span> — Weak relationship. Keep — adds independent information.<br>
-                <span style="color:#16a34a;font-weight:700;">|r| &lt; 0.30</span> — Negligible / no linear relationship. Keep — but check Spearman if you suspect a non-linear pattern.<br><br>
+                        padding:14px 16px;margin:10px 0 14px 0;font-size:0.84rem;color:#334155;">
+                <b>Your current rules:</b><br>
+                <span style="color:#7f1d1d;font-weight:700;">|r| ≥ {thr_drop:.2f}</span> — 🔴 Near-duplicate. One is redundant — drop it unless both are needed for context.<br>
+                <span style="color:#dc2626;font-weight:700;">{thr_review:.2f} ≤ |r| &lt; {thr_drop:.2f}</span> — 🟠 Strongly related. Keep only if both add distinct meaning; otherwise drop the less interpretable one.<br>
+                <span style="color:#d97706;font-weight:700;">{thr_watch:.2f} ≤ |r| &lt; {thr_review:.2f}</span> — 🟡 Moderately related. Usually safe to keep both — monitor with VIF if used in a linear model.<br>
+                <span style="color:#16a34a;font-weight:700;">|r| &lt; {thr_watch:.2f}</span> — 🟢 Keep — adds independent information.<br><br>
                 ⚠️ <b>Correlation ≠ Causation.</b> A high r tells you two columns move together — not which one to trust, and not why.
             </div>
             """, unsafe_allow_html=True)
@@ -1370,9 +1382,9 @@ with tabs[4]:
 
                 def _verdict(r):
                     a = abs(r)
-                    if a >= 0.90: return "🔴 Drop one — near-duplicate"
-                    if a >= 0.70: return "🟠 Consider dropping one"
-                    if a >= 0.50: return "🟡 Keep — monitor with VIF"
+                    if a >= thr_drop:   return "🔴 Drop one — near-duplicate"
+                    if a >= thr_review: return "🟠 Consider dropping one"
+                    if a >= thr_watch:  return "🟡 Keep — monitor with VIF"
                     return "🟢 Keep — independent signal"
 
                 decode_df["Recommendation"] = decode_df["Correlation"].apply(_verdict)
