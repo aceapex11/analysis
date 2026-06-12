@@ -1089,102 +1089,45 @@ with tabs[4]:
     if len(num_cols) < 2:
         st.warning("Need at least 2 numeric columns for correlation.")
     else:
-        # ── Controls row ───────────────────────────────────────
-        ctrl1, ctrl2, ctrl3 = st.columns([2, 1, 1])
-        with ctrl1:
-            corr_cols = st.multiselect("Select Columns", num_cols, default=num_cols, key="corr_cols_sel")
-        with ctrl2:
-            corr_method = st.selectbox("Method", ["pearson", "spearman", "kendall"], key="corr_method_sel")
-        with ctrl3:
-            sig_level = st.slider("Significance α", 0.01, 0.10, 0.05, 0.01, key="corr_sig")
+        # ── Method description expander ────────────────────────
+        with st.expander("📖 Learn about correlation methods — Pearson vs Spearman vs Kendall", expanded=False):
+            corr_method_tabs = st.tabs(list(CORRELATION_METHOD_INFO.keys()))
+            for tab_cm, (m_name, m_info) in zip(corr_method_tabs, CORRELATION_METHOD_INFO.items()):
+                with tab_cm:
+                    render_method_card(m_name, m_info)
 
-        # ── Significance decoder bar ───────────────────────────
+        # ── Quick decision helper ──────────────────────────────
         st.markdown("""
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;
-                    padding:16px 20px;margin:10px 0 18px 0;">
-            <div style="font-size:0.78rem;font-weight:700;color:#334155;margin-bottom:10px;
-                        text-transform:uppercase;letter-spacing:0.05em;">
-                📏 Significance Decoder — p-value scale
-            </div>
-            <div style="display:flex;align-items:center;gap:0;border-radius:8px;overflow:hidden;height:28px;">
-                <div style="flex:1;background:#16a34a;display:flex;align-items:center;
-                            justify-content:center;font-size:0.72rem;font-weight:700;color:#fff;">
-                    p ≤ 0.01 ✦✦✦
-                </div>
-                <div style="flex:1;background:#4ade80;display:flex;align-items:center;
-                            justify-content:center;font-size:0.72rem;font-weight:700;color:#14532d;">
-                    p ≤ 0.05 ✦✦
-                </div>
-                <div style="flex:1;background:#fde68a;display:flex;align-items:center;
-                            justify-content:center;font-size:0.72rem;font-weight:700;color:#92400e;">
-                    p ≤ 0.10 ✦
-                </div>
-                <div style="flex:1;background:#fca5a5;display:flex;align-items:center;
-                            justify-content:center;font-size:0.72rem;font-weight:700;color:#991b1b;">
-                    p &gt; 0.10 ✗
-                </div>
-            </div>
-            <div style="display:flex;gap:20px;margin-top:8px;font-size:0.78rem;color:#64748b;flex-wrap:wrap;">
-                <span><b style="color:#16a34a;">✦✦✦ p≤0.01</b> — Highly significant, very strong evidence</span>
-                <span><b style="color:#16a34a;">✦✦ p≤0.05</b> — Significant, standard threshold</span>
-                <span><b style="color:#d97706;">✦ p≤0.10</b> — Marginally significant, weak evidence</span>
-                <span><b style="color:#dc2626;">✗ p&gt;0.10</b> — Not significant, likely random</span>
-            </div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;
+                    padding:14px 16px;margin:0 0 16px 0;font-size:0.85rem;color:#334155;">
+            <b style="color:#16a34a;">🧭 Quick Guide:</b>
+            &nbsp;<b>Pearson</b> → continuous + normally distributed + linear relationship &nbsp;|&nbsp;
+            <b>Spearman</b> → skewed / ordinal / outliers &nbsp;|&nbsp;
+            <b>Kendall</b> → small samples or many tied values
         </div>
         """, unsafe_allow_html=True)
 
-        # ── Strength decoder bar ───────────────────────────────
-        st.markdown("""
-        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;
-                    padding:16px 20px;margin:0 0 18px 0;">
-            <div style="font-size:0.78rem;font-weight:700;color:#334155;margin-bottom:10px;
-                        text-transform:uppercase;letter-spacing:0.05em;">
-                🔗 Correlation Strength Decoder — |r| scale
-            </div>
-            <div style="display:flex;align-items:stretch;border-radius:8px;overflow:hidden;height:32px;">
-                <div style="flex:1;background:#7f1d1d;display:flex;align-items:center;
-                            justify-content:center;font-size:0.70rem;font-weight:700;color:#fff;">
-                    0.90–1.0<br>Very Strong
-                </div>
-                <div style="flex:1;background:#dc2626;display:flex;align-items:center;
-                            justify-content:center;font-size:0.70rem;font-weight:700;color:#fff;">
-                    0.70–0.89<br>Strong
-                </div>
-                <div style="flex:1;background:#f97316;display:flex;align-items:center;
-                            justify-content:center;font-size:0.70rem;font-weight:700;color:#fff;">
-                    0.50–0.69<br>Moderate
-                </div>
-                <div style="flex:1;background:#eab308;display:flex;align-items:center;
-                            justify-content:center;font-size:0.70rem;font-weight:700;color:#fff;">
-                    0.30–0.49<br>Weak
-                </div>
-                <div style="flex:1;background:#6366f1;display:flex;align-items:center;
-                            justify-content:center;font-size:0.70rem;font-weight:700;color:#fff;">
-                    0.10–0.29<br>Very Weak
-                </div>
-                <div style="flex:1;background:#94a3b8;display:flex;align-items:center;
-                            justify-content:center;font-size:0.70rem;font-weight:700;color:#fff;">
-                    &lt; 0.10<br>Negligible
-                </div>
-            </div>
+        corr_cols   = st.multiselect("Select Columns", num_cols, default=num_cols, key="corr_cols_sel")
+        corr_method = st.selectbox("Correlation Method", ["pearson", "spearman", "kendall"], key="corr_method_sel")
+        sig_level   = st.slider("Significance Level α", 0.01, 0.10, 0.05, 0.01, key="corr_sig")
+
+        # Show active method info badge
+        method_info_active = CORRELATION_METHOD_INFO.get(corr_method, {})
+        st.markdown(f"""
+        <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;
+                    padding:10px 14px;margin:8px 0 14px 0;font-size:0.83rem;color:#334155;">
+            <b style="color:#6366f1;">📌 {corr_method.capitalize()}</b> —
+            {method_info_active.get('what','')}<br>
+            <span style="color:#64748b;font-size:0.78rem;">
+                <b>Best for:</b> {"  ·  ".join(method_info_active.get('best_for', []))}
+                &nbsp;|&nbsp;
+                <b>Avoid when:</b> {method_info_active.get('avoid', '—')}
+            </span>
         </div>
         """, unsafe_allow_html=True)
 
         if len(corr_cols) >= 2:
             corr_df = df_work[corr_cols].corr(method=corr_method)
-
-            # ── Section A: Full Correlation Table ─────────────
-            st.markdown('<div class="section-header">📋 Full Correlation Table (All Pairs)</div>',
-                        unsafe_allow_html=True)
-
-            # Build enriched pairs table
-            corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
-
-            def _sig_stars(p):
-                if p <= 0.01:  return "✦✦✦"
-                if p <= 0.05:  return "✦✦"
-                if p <= 0.10:  return "✦"
-                return "✗"
 
             def _strength_label(r):
                 a = abs(r)
@@ -1195,43 +1138,41 @@ with tabs[4]:
                 if a >= 0.10: return "Very Weak"
                 return "Negligible"
 
-            def _direction(r):
-                return "➕ Positive" if r > 0 else "➖ Negative"
+            def _color_corr(val):
+                try:
+                    v = float(val)
+                    a = abs(v)
+                    if a >= 0.90: bg = "#fee2e2"; fg = "#7f1d1d"
+                    elif a >= 0.70: bg = "#fecaca"; fg = "#dc2626"
+                    elif a >= 0.50: bg = "#fed7aa"; fg = "#c2410c"
+                    elif a >= 0.30: bg = "#fef9c3"; fg = "#854d0e"
+                    elif a >= 0.10: bg = "#e0e7ff"; fg = "#3730a3"
+                    else:           bg = "#f1f5f9"; fg = "#64748b"
+                    return f"background-color:{bg};color:{fg};font-weight:700;font-family:monospace"
+                except: return ""
 
+            # ── Correlation Matrix ──────────────────────────────
+            st.markdown('<div class="section-header">Correlation Matrix</div>', unsafe_allow_html=True)
+            st.dataframe(corr_df.style.background_gradient(cmap=palette, axis=None).format("{:.3f}"),
+                         use_container_width=True)
+
+            fig_c = px.imshow(corr_df, text_auto=".2f", color_continuous_scale="RdBu_r",
+                              zmin=-1, zmax=1,
+                              template=template, height=chart_h, width=chart_w,
+                              title=f"{corr_method.capitalize()} Correlation Heatmap")
+            fig_c.update_layout(font_size=font_sz)
+            st.plotly_chart(fig_c, use_container_width=True)
+
+            # ── Top Correlations (Ranked) ───────────────────────
+            st.markdown('<div class="section-header">Top Correlations (Ranked)</div>', unsafe_allow_html=True)
+            corr_pairs_df = correlation_pairs(df_work, corr_cols, method=corr_method, sig_level=sig_level)
             if not corr_pairs_df.empty:
-                display_df = corr_pairs_df.copy()
-                display_df["Stars"]     = display_df["p-value"].apply(_sig_stars)
-                display_df["Strength"]  = display_df["Correlation"].apply(_strength_label)
-                display_df["Direction"] = display_df["Correlation"].apply(_direction)
-                display_df = display_df[["Col A","Col B","Correlation","p-value","Stars","Significant","Strength","Direction"]]
-
-                def _color_corr(val):
-                    try:
-                        v = float(val)
-                        a = abs(v)
-                        if a >= 0.90: bg = "#fee2e2"; fg = "#7f1d1d"
-                        elif a >= 0.70: bg = "#fecaca"; fg = "#dc2626"
-                        elif a >= 0.50: bg = "#fed7aa"; fg = "#c2410c"
-                        elif a >= 0.30: bg = "#fef9c3"; fg = "#854d0e"
-                        elif a >= 0.10: bg = "#e0e7ff"; fg = "#3730a3"
-                        else:           bg = "#f1f5f9"; fg = "#64748b"
-                        return f"background-color:{bg};color:{fg};font-weight:700;font-family:monospace"
-                    except: return ""
-
-                def _color_stars(val):
-                    if val == "✦✦✦": return "background-color:#dcfce7;color:#15803d;font-weight:700"
-                    if val == "✦✦":  return "background-color:#bbf7d0;color:#166534;font-weight:700"
-                    if val == "✦":   return "background-color:#fef9c3;color:#92400e;font-weight:600"
-                    return "background-color:#fecaca;color:#991b1b;font-weight:600"
-
                 st.dataframe(
-                    display_df.style
-                        .map(_color_corr, subset=["Correlation"])
-                        .map(_color_stars, subset=["Stars"]),
+                    corr_pairs_df.style.map(_color_corr, subset=["Correlation"]),
                     use_container_width=True, height=380
                 )
 
-            # ── Section B: Feature-Focused View ───────────────
+            # ── Feature-Focused View ─────────────────────────────
             st.markdown('<div class="section-header">🔍 Feature-Focused Correlation View</div>',
                         unsafe_allow_html=True)
             st.caption("Pick one column to see how every other column correlates with it.")
@@ -1258,9 +1199,9 @@ with tabs[4]:
                 "Correlation": focus_series.values.round(4),
                 "p-value":     [focus_pvals.get(c, 1.0) for c in focus_series.index],
             })
-            focus_df["Stars"]     = focus_df["p-value"].apply(_sig_stars)
-            focus_df["Strength"]  = focus_df["Correlation"].apply(_strength_label)
-            focus_df["Direction"] = focus_df["Correlation"].apply(_direction)
+            focus_df["Significant"] = focus_df["p-value"].apply(lambda p: "✅" if p < sig_level else "❌")
+            focus_df["Strength"]    = focus_df["Correlation"].apply(_strength_label)
+            focus_df["Direction"]   = focus_df["Correlation"].apply(lambda r: "Positive" if r > 0 else "Negative")
 
             # Horizontal bar chart
             bar_colors = []
@@ -1281,14 +1222,14 @@ with tabs[4]:
                 textposition="outside",
                 customdata=np.stack([
                     focus_df["p-value"].values,
-                    focus_df["Stars"].values,
+                    focus_df["Significant"].values,
                     focus_df["Strength"].values,
                 ], axis=-1),
                 hovertemplate=(
                     "<b>%{y}</b><br>"
                     "r = %{x:.4f}<br>"
                     "p-value = %{customdata[0]}<br>"
-                    "Significance = %{customdata[1]}<br>"
+                    "Significant = %{customdata[1]}<br>"
                     "Strength = %{customdata[2]}<extra></extra>"
                 ),
             ))
@@ -1312,27 +1253,17 @@ with tabs[4]:
             st.plotly_chart(fig_focus, use_container_width=True)
 
             st.dataframe(
-                focus_df.style
-                    .map(_color_corr, subset=["Correlation"])
-                    .map(_color_stars, subset=["Stars"]),
+                focus_df.style.map(_color_corr, subset=["Correlation"]),
                 use_container_width=True,
             )
 
-            # ── Section C: Heatmap ────────────────────────────
-            st.markdown('<div class="section-header">🗺️ Correlation Heatmap</div>', unsafe_allow_html=True)
-            fig_c = px.imshow(corr_df, text_auto=".2f", color_continuous_scale="RdBu_r",
-                              zmin=-1, zmax=1,
-                              template=template, height=chart_h,
-                              title=f"{corr_method.capitalize()} Correlation Heatmap")
-            fig_c.update_layout(font_size=font_sz)
-            st.plotly_chart(fig_c, use_container_width=True)
-
-            # ── Section D: Multicollinearity (VIF) ────────────
+            # ── Multicollinearity (VIF) ──────────────────────────
             st.markdown('<div class="section-header">🔬 Multicollinearity Check (VIF)</div>',
                         unsafe_allow_html=True)
             st.caption("Variance Inflation Factor (VIF) > 5 suggests multicollinearity. VIF > 10 is severe.")
 
             vif_cols = [c for c in corr_cols if df_work[c].dropna().shape[0] > 1]
+            vif_df = None
             if len(vif_cols) >= 2:
                 try:
                     from sklearn.linear_model import LinearRegression
@@ -1418,12 +1349,91 @@ with tabs[4]:
             else:
                 st.info("Select at least 2 columns for VIF analysis.")
 
-            # ── Method expander ────────────────────────────────
-            with st.expander("📖 Learn about correlation methods — Pearson vs Spearman vs Kendall", expanded=False):
-                corr_method_tabs = st.tabs(list(CORRELATION_METHOD_INFO.keys()))
-                for tab_cm, (m_name, m_info) in zip(corr_method_tabs, CORRELATION_METHOD_INFO.items()):
-                    with tab_cm:
-                        render_method_card(m_name, m_info)
+            # ── Decode r: What to Keep / What to Remove ──────────
+            st.markdown('<div class="section-header">🧹 Decode r — What to Keep / What to Remove</div>',
+                        unsafe_allow_html=True)
+            st.markdown("""
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
+                        padding:14px 16px;margin:0 0 14px 0;font-size:0.84rem;color:#334155;">
+                <b>How to read |r|:</b><br>
+                <span style="color:#7f1d1d;font-weight:700;">|r| ≥ 0.90</span> — Near-duplicate columns. One is redundant — drop it unless both are needed for context.<br>
+                <span style="color:#dc2626;font-weight:700;">0.70 ≤ |r| &lt; 0.90</span> — Strongly related. Keep only if both add distinct meaning to your model/analysis; otherwise drop the less interpretable one.<br>
+                <span style="color:#d97706;font-weight:700;">0.50 ≤ |r| &lt; 0.70</span> — Moderately related. Usually safe to keep both — monitor with VIF if used in a linear model.<br>
+                <span style="color:#6366f1;font-weight:700;">0.30 ≤ |r| &lt; 0.50</span> — Weak relationship. Keep — adds independent information.<br>
+                <span style="color:#16a34a;font-weight:700;">|r| &lt; 0.30</span> — Negligible / no linear relationship. Keep — but check Spearman if you suspect a non-linear pattern.<br><br>
+                ⚠️ <b>Correlation ≠ Causation.</b> A high r tells you two columns move together — not which one to trust, and not why.
+            </div>
+            """, unsafe_allow_html=True)
+
+            if not corr_pairs_df.empty:
+                decode_df = corr_pairs_df.copy()
+
+                def _verdict(r):
+                    a = abs(r)
+                    if a >= 0.90: return "🔴 Drop one — near-duplicate"
+                    if a >= 0.70: return "🟠 Consider dropping one"
+                    if a >= 0.50: return "🟡 Keep — monitor with VIF"
+                    return "🟢 Keep — independent signal"
+
+                decode_df["Recommendation"] = decode_df["Correlation"].apply(_verdict)
+                decode_view = decode_df[["Col A", "Col B", "Correlation", "p-value", "Significant", "Recommendation"]]
+
+                # Highlight rows that involve high-VIF columns too
+                high_vif_cols = set()
+                if vif_df is not None:
+                    high_vif_cols = set(vif_df.loc[vif_df["VIF"] > 5, "Column"])
+
+                def _flag_vif(row):
+                    if row["Col A"] in high_vif_cols or row["Col B"] in high_vif_cols:
+                        return row["Recommendation"] + "  (⚠️ also high VIF)"
+                    return row["Recommendation"]
+
+                decode_view = decode_view.copy()
+                decode_view["Recommendation"] = decode_view.apply(_flag_vif, axis=1)
+
+                def _color_rec(val):
+                    if val.startswith("🔴"): return "background-color:#fecaca;color:#7f1d1d;font-weight:700"
+                    if val.startswith("🟠"): return "background-color:#fed7aa;color:#9a3412;font-weight:700"
+                    if val.startswith("🟡"): return "background-color:#fef9c3;color:#92400e;font-weight:600"
+                    return "background-color:#dcfce7;color:#166534;font-weight:600"
+
+                st.dataframe(
+                    decode_view.style
+                        .map(_color_corr, subset=["Correlation"])
+                        .map(_color_rec,  subset=["Recommendation"]),
+                    use_container_width=True, height=380
+                )
+
+                drop_candidates = decode_view.loc[
+                    decode_view["Recommendation"].str.startswith("🔴") |
+                    decode_view["Recommendation"].str.startswith("🟠"),
+                    ["Col A", "Col B", "Correlation", "Recommendation"]
+                ]
+                if not drop_candidates.empty:
+                    st.markdown("**Pairs worth reviewing for redundancy:**")
+                    for _, row in drop_candidates.iterrows():
+                        st.markdown(
+                            f"- **{row['Col A']}** ↔ **{row['Col B']}**  "
+                            f"(r = {row['Correlation']:+.3f}) — {row['Recommendation']}"
+                        )
+                else:
+                    st.success("No strongly redundant pairs found at the selected significance level — all selected columns appear to carry independent information.")
+
+            # ── Interpretation guide ──────────────────────────
+            st.markdown("""
+            <div style="margin-top:16px;padding:14px 16px;background:#fff;border:1px solid #e2e8f0;
+                        border-radius:10px;font-size:0.84rem;color:#334155;">
+                <b>📏 Correlation Strength Guide:</b><br>
+                <span style="color:#dc2626;font-weight:600;">|r| ≥ 0.90</span> — Very strong &nbsp;·&nbsp;
+                <span style="color:#f97316;font-weight:600;">0.70 ≤ |r| &lt; 0.90</span> — Strong &nbsp;·&nbsp;
+                <span style="color:#d97706;font-weight:600;">0.50 ≤ |r| &lt; 0.70</span> — Moderate &nbsp;·&nbsp;
+                <span style="color:#6366f1;font-weight:600;">0.30 ≤ |r| &lt; 0.50</span> — Weak &nbsp;·&nbsp;
+                <span style="color:#16a34a;font-weight:600;">|r| &lt; 0.30</span> — Negligible<br><br>
+                ⚠️ <b>Correlation ≠ Causation.</b>
+                A high correlation between two variables does not mean one causes the other —
+                always check for confounders and use domain knowledge.
+            </div>
+            """, unsafe_allow_html=True)
 
 
 
