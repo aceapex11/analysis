@@ -1356,14 +1356,34 @@ with tabs[4]:
 
             thr_col1, thr_col2, thr_col3 = st.columns(3)
             with thr_col1:
-                thr_drop = st.slider("🔴 Drop threshold — |r| ≥", 0.50, 1.00, 0.90, 0.01, key="thr_drop",
+                thr_drop_raw = st.slider("🔴 Drop threshold — |r| ≥", 0.0, 1.00, 0.90, 0.01, key="thr_drop_raw",
                                       help="Pairs at or above this |r| are flagged as near-duplicates — drop one.")
             with thr_col2:
-                thr_review = st.slider("🟠 Review threshold — |r| ≥", 0.30, thr_drop, 0.70, 0.01, key="thr_review",
+                thr_review_raw = st.slider("🟠 Review threshold — |r| ≥", 0.0, 1.00, 0.70, 0.01, key="thr_review_raw",
                                         help="Pairs between this and the drop threshold are flagged for review.")
             with thr_col3:
-                thr_watch = st.slider("🟡 Watch threshold — |r| ≥", 0.10, thr_review, 0.50, 0.01, key="thr_watch",
+                thr_watch_raw = st.slider("🟡 Watch threshold — |r| ≥", 0.0, 1.00, 0.50, 0.01, key="thr_watch_raw",
                                        help="Pairs between this and the review threshold are flagged to monitor.")
+
+            # Cascade: each threshold is forced strictly below the one above it,
+            # so moving Drop down automatically pulls Review/Watch down too —
+            # the three bands can never overlap or invert.
+            _gap = 0.01
+            thr_drop   = thr_drop_raw
+            thr_review = min(thr_review_raw, round(thr_drop - _gap, 2))
+            thr_watch  = min(thr_watch_raw, round(thr_review - _gap, 2))
+            thr_drop, thr_review, thr_watch = (
+                max(0.0, thr_drop), max(0.0, thr_review), max(0.0, thr_watch)
+            )
+
+            # Tell the user if a slider got auto-adjusted to keep the order valid
+            adj_msgs = []
+            if abs(thr_review - thr_review_raw) > 1e-9:
+                adj_msgs.append(f"Review adjusted to **{thr_review:.2f}** (must stay below Drop)")
+            if abs(thr_watch - thr_watch_raw) > 1e-9:
+                adj_msgs.append(f"Watch adjusted to **{thr_watch:.2f}** (must stay below Review)")
+            if adj_msgs:
+                st.caption("⚙️ " + "  ·  ".join(adj_msgs))
 
             st.markdown(f"""
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;
@@ -1409,9 +1429,20 @@ with tabs[4]:
                     if val.startswith("🟡"): return "background-color:#fef9c3;color:#92400e;font-weight:600"
                     return "background-color:#dcfce7;color:#166534;font-weight:600"
 
+                def _color_corr_decode(val):
+                    """Colour the Correlation column using the SAME user-defined
+                    thresholds as the Recommendation column, so both stay in sync."""
+                    try:
+                        a = abs(float(val))
+                        if a >= thr_drop:   return "background-color:#fecaca;color:#7f1d1d;font-weight:700;font-family:monospace"
+                        if a >= thr_review: return "background-color:#fed7aa;color:#9a3412;font-weight:700;font-family:monospace"
+                        if a >= thr_watch:  return "background-color:#fef9c3;color:#92400e;font-weight:700;font-family:monospace"
+                        return "background-color:#dcfce7;color:#166534;font-weight:700;font-family:monospace"
+                    except: return ""
+
                 st.dataframe(
                     decode_view.style
-                        .map(_color_corr, subset=["Correlation"])
+                        .map(_color_corr_decode, subset=["Correlation"])
                         .map(_color_rec,  subset=["Recommendation"]),
                     use_container_width=True, height=380
                 )
@@ -1496,6 +1527,50 @@ with tabs[5]:
             fig_chart = px.scatter(df_work, x=col_x, y=y_arg, color=color_arg,
                 template=template, height=chart_h, title=chart_title, trendline="ols")
 
+        elif chart_type == "Bar Chart" and y_arg:
+            df_bar = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
+
+            bar_x_is_date = pd.api.types.is_datetime64_any_dtype(df_bar[col_x])
+            if not bar_x_is_date:
+                try:
+                    df_bar[col_x] = pd.to_datetime(df_bar[col_x], errors="raise")
+                    bar_x_is_date = True
+                except Exception:
+                    bar_x_is_date = False
+
+            bar_period = None
+            if bar_x_is_date:
+                bar_period = st.selectbox(
+                    "Group date by", ["Day", "Week", "Month", "Quarter", "Year"],
+                    index=2, key="bar_period",
+                )
+                bar_freq_map = {"Day": "D", "Week": "W", "Month": "M", "Quarter": "Q", "Year": "Y"}
+                df_bar[col_x] = df_bar[col_x].dt.to_period(bar_freq_map[bar_period]).dt.to_timestamp()
+
+            bar_agg = st.selectbox(
+                "Aggregate Y by X", ["Sum", "Mean", "Median", "Count", "None (raw, sorted)"],
+                index=0, key="bar_agg",
+            )
+
+            if bar_agg != "None (raw, sorted)":
+                bar_agg_fn = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[bar_agg]
+                bar_group_cols = [col_x] + ([color_arg] if color_arg else [])
+                df_bar_plot = df_bar.groupby(bar_group_cols, sort=True)[y_arg].agg(bar_agg_fn).reset_index()
+                bar_y_label = f"{bar_agg} of {y_arg}" + (f" by {bar_period}" if bar_period else "")
+            else:
+                df_bar_plot = df_bar.sort_values(col_x)
+                bar_y_label = y_arg
+
+            n_bars = df_bar_plot[col_x].nunique()
+            if n_bars > 60:
+                st.warning(f"{n_bars:,} bars — consider grouping by a coarser period or filtering categories for readability.")
+
+            fig_chart = px.bar(
+                df_bar_plot, x=col_x, y=y_arg, color=color_arg,
+                template=template, height=chart_h, title=chart_title,
+                labels={y_arg: bar_y_label},
+            )
+
         elif chart_type == "Bar Chart":
             gb = df_work[col_x].value_counts().reset_index()
             gb.columns = [col_x, "count"]
@@ -1509,64 +1584,99 @@ with tabs[5]:
                 template=template, height=chart_h, title=chart_title)
 
         elif chart_type == "Line Chart" and y_arg:
-            # Aggregate: if X is datetime or has many repeated values, group by X and sum/mean Y
-            df_line_raw = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
-            # Try to convert X to datetime for proper sorting
-            x_is_date = pd.api.types.is_datetime64_any_dtype(df_line_raw[col_x])
-            if not x_is_date:
-                try:
-                    df_line_raw[col_x] = pd.to_datetime(df_line_raw[col_x])
-                    x_is_date = True
-                except Exception:
-                    pass
+            df_line = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
 
-            agg_options = ["None (raw, sorted)", "Sum", "Mean", "Median", "Count"]
-            line_agg = st.selectbox("Aggregate Y by X?", agg_options, index=1 if x_is_date else 0, key="line_agg")
+            line_x_is_date = pd.api.types.is_datetime64_any_dtype(df_line[col_x])
+            if not line_x_is_date:
+                try:
+                    df_line[col_x] = pd.to_datetime(df_line[col_x], errors="raise")
+                    line_x_is_date = True
+                except Exception:
+                    line_x_is_date = False
+
+            line_period = None
+            if line_x_is_date:
+                line_period = st.selectbox(
+                    "Group date by", ["Day", "Week", "Month", "Quarter", "Year"],
+                    index=2, key="line_period",
+                )
+                line_freq_map = {"Day": "D", "Week": "W", "Month": "M", "Quarter": "Q", "Year": "Y"}
+                df_line[col_x] = df_line[col_x].dt.to_period(line_freq_map[line_period]).dt.to_timestamp()
+
+            line_agg = st.selectbox(
+                "Aggregate Y by X", ["Sum", "Mean", "Median", "Count", "None (raw, sorted)"],
+                index=0, key="line_agg",
+            )
 
             if line_agg != "None (raw, sorted)":
-                agg_fn = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[line_agg]
-                if color_arg:
-                    df_line = df_line_raw.groupby([col_x, color_arg], sort=True)[y_arg].agg(agg_fn).reset_index()
-                else:
-                    df_line = df_line_raw.groupby(col_x, sort=True)[y_arg].agg(agg_fn).reset_index()
+                line_agg_fn = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[line_agg]
+                line_group_cols = [col_x] + ([color_arg] if color_arg else [])
+                df_line_plot = df_line.groupby(line_group_cols, sort=True)[y_arg].agg(line_agg_fn).reset_index()
+                line_y_label = f"{line_agg} of {y_arg}" + (f" by {line_period}" if line_period else "")
             else:
-                df_line = df_line_raw.sort_values(col_x)
+                df_line_plot = df_line.sort_values(col_x)
+                line_y_label = y_arg
+
+            n_points = df_line_plot[col_x].nunique()
+            if n_points > 500:
+                st.warning(f"{n_points:,} points — consider grouping by a coarser period (e.g. Month or Quarter).")
 
             fig_chart = px.line(
-                df_line, x=col_x, y=y_arg, color=color_arg,
-                markers=True,
+                df_line_plot, x=col_x, y=y_arg, color=color_arg,
+                markers=(n_points <= 100),
                 template=template, height=chart_h, title=chart_title,
+                labels={y_arg: line_y_label},
             )
-            fig_chart.update_traces(
-                marker=dict(size=7, line=dict(width=1.5, color="white")),
-                line=dict(width=2.2),
-            )
+            fig_chart.update_traces(line=dict(width=2.2))
+            if n_points <= 100:
+                fig_chart.update_traces(marker=dict(size=7, line=dict(width=1.5, color="white")))
 
         elif chart_type == "Area Chart" and y_arg:
-            df_area_raw = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
-            n_rows_a = len(df_area_raw)
-            n_unique_a = df_area_raw[col_x].nunique()
-            if n_rows_a > n_unique_a * 1.5:
-                st.info(
-                    f"**Aggregation applied automatically.** "
-                    f"{n_rows_a:,} rows but only {n_unique_a:,} unique X values — values are summed per X point."
+            df_area = df_work[[col_x, y_arg] + ([color_arg] if color_arg else [])].dropna(subset=[col_x, y_arg]).copy()
+
+            area_x_is_date = pd.api.types.is_datetime64_any_dtype(df_area[col_x])
+            if not area_x_is_date:
+                try:
+                    df_area[col_x] = pd.to_datetime(df_area[col_x], errors="raise")
+                    area_x_is_date = True
+                except Exception:
+                    area_x_is_date = False
+
+            area_period = None
+            if area_x_is_date:
+                area_period = st.selectbox(
+                    "Group date by", ["Day", "Week", "Month", "Quarter", "Year"],
+                    index=2, key="area_period",
                 )
-            area_agg_options = ["Sum", "Mean", "Median", "Count", "None (raw data, sorted)"]
-            area_agg = st.selectbox("Aggregate Y by X?", area_agg_options,
-                                    index=0 if n_rows_a > n_unique_a * 1.5 else 4, key="area_agg")
-            if area_agg != "None (raw data, sorted)":
-                agg_fn_a = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[area_agg]
-                if color_arg:
-                    df_area = df_area_raw.groupby([col_x, color_arg], sort=True)[y_arg].agg(agg_fn_a).reset_index()
-                else:
-                    df_area = df_area_raw.groupby(col_x, sort=True)[y_arg].agg(agg_fn_a).reset_index()
-                area_y_label = f"{area_agg} of {y_arg}"
+                area_freq_map = {"Day": "D", "Week": "W", "Month": "M", "Quarter": "Q", "Year": "Y"}
+                df_area[col_x] = df_area[col_x].dt.to_period(area_freq_map[area_period]).dt.to_timestamp()
+
+            area_agg = st.selectbox(
+                "Aggregate Y by X", ["Sum", "Mean", "Median", "Count", "None (raw, sorted)"],
+                index=0, key="area_agg",
+            )
+
+            if area_agg != "None (raw, sorted)":
+                area_agg_fn = {"Sum": "sum", "Mean": "mean", "Median": "median", "Count": "count"}[area_agg]
+                area_group_cols = [col_x] + ([color_arg] if color_arg else [])
+                df_area_plot = df_area.groupby(area_group_cols, sort=True)[y_arg].agg(area_agg_fn).reset_index()
+                area_y_label = f"{area_agg} of {y_arg}" + (f" by {area_period}" if area_period else "")
             else:
-                df_area = df_area_raw.sort_values(col_x)
+                df_area_plot = df_area.sort_values(col_x)
                 area_y_label = y_arg
-            fig_chart = px.area(df_area, x=col_x, y=y_arg, color=color_arg,
+
+            n_points = df_area_plot[col_x].nunique()
+            if n_points > 500:
+                st.warning(f"{n_points:,} points — consider grouping by a coarser period (e.g. Month or Quarter).")
+
+            fig_chart = px.area(
+                df_area_plot, x=col_x, y=y_arg, color=color_arg,
                 template=template, height=chart_h, title=chart_title,
-                labels={y_arg: area_y_label})
+                labels={y_arg: area_y_label},
+            )
+
+        elif chart_type in ("Line Chart", "Area Chart") and not y_arg:
+            st.info("Select a Y column to plot a Line or Area chart — these need a numeric measure on the Y-axis.")
 
         elif chart_type == "ECDF Plot":
             sorted_vals = np.sort(df_work[col_x].dropna())
